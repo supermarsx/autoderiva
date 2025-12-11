@@ -1,0 +1,97 @@
+[Variables]
+Product=DPTF
+ProductFullName=Intel(R) Dynamic Tuning
+ProductMessageKey=SYSTEM\CurrentControlSet\Services\EventLog\Application\%Product%
+PlaceholderFile=placeholder.txt
+LogDir=log
+DptfRoot=%SystemCurOS%\Intel
+DptfDir=%DptfRoot%\DPTF
+DvRoot=%WinDir%\ServiceProfiles\LocalService\AppData\Local\Intel
+DvDir=%DvRoot%\DPTF
+DspDvFile=dsp.dv
+
+; Sequence information ------------------------------------------------
+; INSTALLATION:
+; -2000 - Stop services
+; -1500 - Copy folders
+; -1400 - Copy files and delete placeholder files
+; -1350 - Create registry entries
+;     0 - Driver installation
+;  1000 - Start services
+;
+; UNINSTALL:
+; -2000 - Stop services
+; -1000 - Uninstall services
+;     0 - Uninstall drivers
+;  1300 - Remove UMDF device
+;  1400 - Remove folders
+;  1500 - Remove files
+;  1600 - Remove registry entries
+;  1700 - Remove shortcuts
+;
+
+[Registry]
+operation=deleteonuninstall
+root=HKLM
+path=%ProductMessageKey%
+value=TypesSupported
+usequence=1600
+
+[Registry]
+operation=deleteonuninstall
+root=HKLM
+path=%ProductMessageKey%
+value=EventMessageFile
+usequence=1600
+
+[Registry]
+operation=deleteonuninstall
+root=HKLM
+path=%ProductMessageKey%
+value=CategoryCount
+usequence=1600
+
+[Registry]
+operation=deleteonuninstall
+root=HKLM
+path=%ProductMessageKey%
+value=CategoryMessageFile
+usequence=1600
+
+[folder]
+operation=deleteonuninstall
+destination=%DptfDir%
+delete_if_not_empty=yes
+usequence=1400
+
+[folder]
+operation=deleteonuninstall
+destination=%DvDir%\%LogDir%
+delete_if_not_empty=yes
+usequence=1400
+
+[File]
+operation=deleteonuninstall
+destination=%DvDir%\%DspDvFile%
+mode=overwrite
+usequence=1500
+
+[folder]
+operation=deleteonuninstall
+destination=%DvDir%
+usequence=1500
+
+[folder]
+operation=deleteonuninstall
+destination=%DvRoot%
+usequence=1500
+
+[folder]
+operation=deleteonuninstall
+destination=%DptfDir%
+usequence=1500
+
+[folder]
+operation=deleteonuninstall
+destination=%DptfRoot%
+usequence=1500

@@ -1,0 +1,173 @@
+; ************************************************************
+; ************************************************************
+; **  Filename: NULL_HECISystem.inf                         **
+; **  Abstract: Assigns the null driver to devices          **
+; **            for yellow-bang removal and                 **
+; **            brands Intel(R) devices                     ** 
+; ************************************************************
+; ************************************************************
+
+[Version]
+Signature=$WINDOWS NT$
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%INTEL%
+CatalogFile=NULL_HECI.cat
+DriverVer=01/04/2013, 0.0.0.1
+
+[SourceDisksNames]
+
+[SourceDisksFiles]
+
+[ControlFlags]
+ExcludeFromSelect=*
+
+[Manufacturer]
+%INTEL%=INTEL,NTx86,NTamd64,NTx86.6.1,NTamd64.6.1
+
+[INTEL.NTx86]
+%PCI\VEN_8086&DEV_19D3Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D3
+%PCI\VEN_8086&DEV_19D4Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D4
+%PCI\VEN_8086&DEV_19D6Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D6
+%PCI\VEN_8086&DEV_1C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3A
+%PCI\VEN_8086&DEV_1C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3B
+%PCI\VEN_8086&DEV_1E3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1E3A
+%PCI\VEN_8086&DEV_8C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3A
+%PCI\VEN_8086&DEV_8C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3B
+%PCI\VEN_8086&DEV_8CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBA
+%PCI\VEN_8086&DEV_8CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBB
+%PCI\VEN_8086&DEV_9CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBA
+%PCI\VEN_8086&DEV_9CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBB
+%PCI\VEN_8086&DEV_A360Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A360
+%PCI\VEN_8086&DEV_A361Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A361
+%PCI\VEN_8086&DEV_A364Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A364
+%PCI\VEN_8086&DEV_A365Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A365
+
+[INTEL.NTx86.6.1]
+%PCI\VEN_8086&DEV_19D3Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D3
+%PCI\VEN_8086&DEV_19D4Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D4
+%PCI\VEN_8086&DEV_19D6Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D6
+%PCI\VEN_8086&DEV_1C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3A
+%PCI\VEN_8086&DEV_1C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3B
+%PCI\VEN_8086&DEV_1D3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1D3A
+%PCI\VEN_8086&DEV_1D3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1D3B
+%PCI\VEN_8086&DEV_1E3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1E3A
+%PCI\VEN_8086&DEV_8C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3A
+%PCI\VEN_8086&DEV_8C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3B
+%PCI\VEN_8086&DEV_8CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBA
+%PCI\VEN_8086&DEV_8CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBB
+%PCI\VEN_8086&DEV_8D3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8D3A
+%PCI\VEN_8086&DEV_8D3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8D3B
+%PCI\VEN_8086&DEV_9CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBA
+%PCI\VEN_8086&DEV_9CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBB
+%PCI\VEN_8086&DEV_A13ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A13A
+%PCI\VEN_8086&DEV_A13BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A13B
+%PCI\VEN_8086&DEV_A13EDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A13E
+%PCI\VEN_8086&DEV_A360Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A360
+%PCI\VEN_8086&DEV_A361Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A361
+%PCI\VEN_8086&DEV_A364Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A364
+%PCI\VEN_8086&DEV_A365Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A365
+
+[INTEL.NTamd64]
+%PCI\VEN_8086&DEV_19D3Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D3
+%PCI\VEN_8086&DEV_19D4Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D4
+%PCI\VEN_8086&DEV_19D6Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D6
+%PCI\VEN_8086&DEV_1C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3A
+%PCI\VEN_8086&DEV_1C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3B
+%PCI\VEN_8086&DEV_1E3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1E3A
+%PCI\VEN_8086&DEV_8C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3A
+%PCI\VEN_8086&DEV_8C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3B
+%PCI\VEN_8086&DEV_8CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBA
+%PCI\VEN_8086&DEV_8CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBB
+%PCI\VEN_8086&DEV_9CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBA
+%PCI\VEN_8086&DEV_9CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBB
+%PCI\VEN_8086&DEV_A360Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A360
+%PCI\VEN_8086&DEV_A361Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A361
+%PCI\VEN_8086&DEV_A364Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A364
+%PCI\VEN_8086&DEV_A365Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A365
+
+[INTEL.NTamd64.6.1]
+%PCI\VEN_8086&DEV_19D3Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D3
+%PCI\VEN_8086&DEV_19D4Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D4
+%PCI\VEN_8086&DEV_19D6Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_19D6
+%PCI\VEN_8086&DEV_1C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3A
+%PCI\VEN_8086&DEV_1C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1C3B
+%PCI\VEN_8086&DEV_1D3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1D3A
+%PCI\VEN_8086&DEV_1D3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1D3B
+%PCI\VEN_8086&DEV_1E3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_1E3A
+%PCI\VEN_8086&DEV_8C3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3A
+%PCI\VEN_8086&DEV_8C3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8C3B
+%PCI\VEN_8086&DEV_8CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBA
+%PCI\VEN_8086&DEV_8CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8CBB
+%PCI\VEN_8086&DEV_8D3ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8D3A
+%PCI\VEN_8086&DEV_8D3BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_8D3B
+%PCI\VEN_8086&DEV_9CBADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBA
+%PCI\VEN_8086&DEV_9CBBDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_9CBB
+%PCI\VEN_8086&DEV_A13ADesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A13A
+%PCI\VEN_8086&DEV_A13BDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A13B
+%PCI\VEN_8086&DEV_A13EDesc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A13E
+%PCI\VEN_8086&DEV_A360Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A360
+%PCI\VEN_8086&DEV_A361Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A361
+%PCI\VEN_8086&DEV_A364Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A364
+%PCI\VEN_8086&DEV_A365Desc%=Needs_NO_DRV,PCI\VEN_8086&DEV_A365
+
+[Needs_NO_DRV]
+Include=machine.inf
+Needs=NO_DRV
+
+[Needs_NO_DRV.Services]
+Include=machine.inf
+Needs=NO_DRV.Services
+
+[Strings]
+INTEL="INTEL"
+PCI\VEN_8086&DEV_19D3Desc="Intel(R) Atom(TM) processor C3000 product family Management Engine Interface - 19D3"
+PCI\VEN_8086&DEV_19D4Desc="Intel(R) Atom(TM) processor C3000 product family Management Engine Interface - 19D4"
+PCI\VEN_8086&DEV_19D6Desc="Intel(R) Atom(TM) processor C3000 product family Management Engine Interface - 19D6"
+PCI\VEN_8086&DEV_1C3ADesc="Intel(R) 6 Series/C200 Series Chipset Family Management Engine Interface - 1C3A"
+PCI\VEN_8086&DEV_1C3BDesc="Intel(R) 6 Series/C200 Series Chipset Family Management Engine Interface - 1C3B"
+PCI\VEN_8086&DEV_1D3ADesc="Intel(R) C600/X79 Series Management Engine Interface - 1D3A"
+PCI\VEN_8086&DEV_1D3BDesc="Intel(R) C600/X79 Series Management Engine Interface - 1D3B"
+PCI\VEN_8086&DEV_1E3ADesc="Intel(R) 7 Series/C216 Chipset Family Management Engine Interface - 1E3A"
+PCI\VEN_8086&DEV_8C3ADesc="Intel(R) 8 Series/C220 Series Management Engine Interface - 8C3A"
+PCI\VEN_8086&DEV_8C3BDesc="Intel(R) 8 Series/C220 Series Management Engine Interface - 8C3B"
+PCI\VEN_8086&DEV_8CBADesc="Intel(R) 9 Series Chipset Family Mobile Management Engine Interface - 8CBA"
+PCI\VEN_8086&DEV_8CBBDesc="Intel(R) 9 Series Chipset Family Mobile Management Engine Interface - 8CBB"
+PCI\VEN_8086&DEV_8D3ADesc="Intel(R) C610 series/X99 Chipset Management Engine Interface - 8D3A"
+PCI\VEN_8086&DEV_8D3BDesc="Intel(R) C610 series/X99 Chipset Management Engine Interface - 8D3B"
+PCI\VEN_8086&DEV_9CBADesc="Mobile 5th Generation Intel(R) Core(TM) Management Engine Interface - 9CBA"
+PCI\VEN_8086&DEV_9CBBDesc="Mobile 5th Generation Intel(R) Core(TM) Management Engine Interface - 9CBB"
+PCI\VEN_8086&DEV_A13ADesc="Intel(R) 100 Series/C230 Series Chipset Family Management Engine Interface - A13A"
+PCI\VEN_8086&DEV_A13BDesc="Intel(R) 100 Series/C230 Series Chipset Family Management Engine Interface - A13B"
+PCI\VEN_8086&DEV_A13EDesc="Intel(R) 100 Series/C230 Series Chipset Family Management Engine Interface - A13E"
+PCI\VEN_8086&DEV_A360Desc="Intel(R) Management Engine Interface - A360"
+PCI\VEN_8086&DEV_A361Desc="Intel(R) Management Engine Interface - A361"
+PCI\VEN_8086&DEV_A364Desc="Intel(R) Management Engine Interface - A364"
+PCI\VEN_8086&DEV_A365Desc="Intel(R) Management Engine Interface - A365"
+
+
+
+
+; Copyright (c) 2003-2017 Intel Corporation
+; 
+; ********************************************************************************
+; Intel is making no claims of usability, efficacy or warranty.
+; ********************************************************************************
+; Information in this document is provided in connection with Intel products. No
+; license, express or implied, by estoppel or otherwise, to any intellectual
+; property rights is granted by this document. Intel assumes no liability
+; whatsoever, and Intel disclaims any express or implied warranty, relating to
+; sale and/or use of Intel products including liability or warranties relating to
+; fitness for a particular purpose, merchantability, or infringement of any
+; patent, copyright or other intellectual property right. Intel products are not
+; intended for use in medical, life saving, or life sustaining applications.
+; ********************************************************************************
+; Intel Corporation disclaims all warranties and liabilities for the use of this
+; document and the information contained herein, and assumes no responsibility for
+; any errors which may appear in this document, nor does Intel make a commitment
+; to update the information contained herein. Intel reserves the right to make
+; changes to this document at any time, without notice.
+; ********************************************************************************
+; ********************************************************************************
+; 
+; * Third-party brands and names are the property of their respective owners.

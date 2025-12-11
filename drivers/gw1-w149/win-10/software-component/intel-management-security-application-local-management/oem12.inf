@@ -1,0 +1,311 @@
+;=============================================================================
+;
+; Copyright (c) Intel Corporation (2017-2020).
+;
+; INTEL MAKES NO WARRANTY OF ANY KIND REGARDING THE CODE.  THIS CODE IS
+; LICENSED ON AN "AS IS" BASIS AND INTEL WILL NOT PROVIDE ANY SUPPORT,
+; ASSISTANCE, INSTALLATION, TRAINING OR OTHER SERVICES.  INTEL DOES NOT
+; PROVIDE ANY UPDATES, ENHANCEMENTS OR EXTENSIONS.  INTEL SPECIFICALLY
+; DISCLAIMS ANY WARRANTY OF MERCHANTABILITY, NONINFRINGEMENT, FITNESS FOR ANY
+; PARTICULAR PURPOSE, OR ANY OTHER WARRANTY.  Intel disclaims all liability,
+; including liability for infringement of any proprietary rights, relating to
+; use of the code. No license, express or implied, by estoppel or otherwise,
+; to any intellectual property rights is granted herein.
+;
+;=============================================================================
+
+;======================================================================
+; Installation INF for the Intel(R) Management and Security Application Local Management
+; Component INF
+;======================================================================
+[Version]
+Signature="$WINDOWS NT$"
+Class=SoftwareComponent
+ClassGuid={5c4c3332-344d-483c-8739-259e934c9cc8}
+Provider=%ManufacturerName%
+CatalogFile=lms.cat
+DriverVer = 06/25/2020,2026.14.0.1682
+
+[SourceDisksNames]
+1 = %DiskId%
+
+[SourceDisksFiles]
+FWUpdateLib_11.dll                  = 1
+FWUpdateLib_12.dll                  = 1
+ComEventHandler.dll                 = 1
+Configurator.dll                    = 1
+EventManager.dll                    = 1
+GmsCommon.dll                       = 1
+HistoryEventHandler.dll             = 1
+HostChangesNotificationService.dll  = 1
+IPRefreshService.dll                = 1
+LMS.exe                             = 1
+PartialFWUpdateService.dll          = 1
+PortForwardingService.dll           = 1
+PowerOperationsService.dll          = 1
+SharedStaticIPService.dll           = 1
+StatusEventHandler.dll              = 1
+TimeSyncService.dll                 = 1
+WinLogEventHandler.dll              = 1
+WMIEventHandler.dll                 = 1
+ACE.dll                             = 1
+WsmanClient.dll                     = 1
+WiFiProfileSyncService.dll          = 1
+1100_PD_PFU.BIN                     = 1
+1100_PP_PFU.BIN                     = 1
+1105_PD_PFU.BIN                     = 1
+1105_PP_PFU.BIN                     = 1
+1106_PD_PFU.BIN                     = 1
+1106_PP_PFU.BIN                     = 1
+1108_PD_PFU.BIN                     = 1
+1108_PP_PFU.BIN                     = 1
+1200_PD_PFU.BIN                     = 1
+1200_PP_PFU.BIN                     = 1
+1300_PD_PFU.BIN                     = 1
+1300_PP_PFU.BIN                     = 1
+1400_PD_PFU.BIN                     = 1
+1400_PP_PFU.BIN                     = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName%=Intel,NTx86.10.0, NTamd64.10.0
+
+[Intel.NTx86.10.0]
+%LMSDescription% = LMSInstallSection, SWC\5DCEB103-DD64-403C-A17C-94FC5F917A9C
+
+[Intel.NTamd64.10.0]
+%LMSDescription% = LMSInstallSection, SWC\5DCEB103-DD64-403C-A17C-94FC5F917A9C
+
+
+[LMSInstallSection]
+; The install section is typically empty, but can contain entries that
+; copy files or modify the registry.
+CopyFiles = LMS_Files
+AddReg    = LMS_Service_AddReg
+Addreg    = LMS_COMServer_AddReg
+
+[LMSInstallSection.Services]
+AddService = , 0x00000002
+AddService = LMS, %SPSVCSINST_STARTSERVICE%, LMS_Service_Inst
+
+[LMSInstallSection.ntamd64]
+CopyFiles = LMS_Files
+AddReg    = LMS_Service_AddReg
+Addreg    = LMS_COMServer_AddReg
+
+
+[LMSInstallSection.ntamd64.Services]
+AddService = , 0x00000002
+AddService = LMS, %SPSVCSINST_STARTSERVICE%, LMS_Service_Inst
+
+; -------------- LMS driver install sections
+[LMS_Service_Inst]
+DisplayName    = "Intel(R) Management and Security Application Local Management Service"
+Description    = "Intel(R) Management and Security Application Local Management Service - Provides OS-related Intel(R) ME functionality."
+ServiceType    = 0x00000010      ; SERVICE_WIN32_OWN_PROCESS
+StartType      = 2               ; SERVICE_AUTO_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\LMS.exe
+
+
+[LMS_Service_AddReg]
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetUserInitiatedEnabled",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetKVMRedirectionState",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","OpenUserInitiatedConnection",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","CloseUserInitiatedConnection",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetIMSSEventHistory",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetAMTVersion",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetLMSVersion",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetHeciVersion",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetProvisioningState",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetNetworkConnectionStatus",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","userInitiatedPolicyRuleExists",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","snmpEventSubscriberExists",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","CILAFilterCollectionSubscriptionExists",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetPowerPolicy",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetLastResetReason",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetRedirectionStatus",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetSystemDefenseStatus",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetNetworkSettings",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetSystemUUID",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetIPv6NetworkSettings",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","SetSpriteLanguage",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","SetSpriteZoom",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetSpriteParameters",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","TerminateRemedySessions",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetAuditLogs",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetATDeviceInfo",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetTheFeatureState",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetCustomerType",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetMenageabiltyMode",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetConfigurationInfo",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetUserConsentState",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetWLANLinkInfo",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","SetLinkPreferenceToHost",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetFWInfo",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetPMCVersion",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","InitiateUserConnection",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","UpdateScreenSettings",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetRedirectionSessionLinkTechnology",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","IsRebootAfterProvisioningNeeded",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","UserInitiatedPolicyRuleForLocalMpsExists",%FLG_ADDREG_TYPE_SZ%
+HKLM, "SYSTEM\CurrentControlSet\Services\LMS\IntelAMTUNS\credentials","GetMeasuredBootState",%FLG_ADDREG_TYPE_SZ%
+
+; Add all registry keys to successfully register the
+; LMS as COM Server.
+[LMS_COMServer_AddReg]
+HKCR,AppID\LMS.EXE,AppID,,"{545C8D56-7A88-492D-B38D-559657A3DD4C}"
+HKCR,AppID\{545C8D56-7A88-492D-B38D-559657A3DD4C},,,"LMS"
+HKCR,AppID\{545C8D56-7A88-492D-B38D-559657A3DD4C},"LocalService",,"LMS"
+
+;Lib
+HKCR,TypeLib\{9853D245-3E9D-4946-895A-F30D6396DEA6},,%FLG_ADDREG_KEYONLY%
+HKCR,TypeLib\{9853D245-3E9D-4946-895A-F30D6396DEA6}\1.0,,,"AMT_COM_Interface 1.0 Type Library"
+HKCR,TypeLib\{9853D245-3E9D-4946-895A-F30D6396DEA6}\1.0\0,,%FLG_ADDREG_KEYONLY%
+HKCR,TypeLib\{9853D245-3E9D-4946-895A-F30D6396DEA6}\1.0\0\win32,,%REG_EXPAND_SZ%,"%13%\LMS.exe"
+HKCR,TypeLib\{9853D245-3E9D-4946-895A-F30D6396DEA6}\1.0\FLAGS,,,"0"
+HKCR,TypeLib\{9853D245-3E9D-4946-895A-F30D6396DEA6}\1.0\HELPDIR,,%REG_EXPAND_SZ%,"%13%\"
+
+;AT_Device
+HKCR,LMS.AT_Device,,,"AT_Device Class"
+HKCR,LMS.AT_Device\CLSID,,,"{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2}"
+HKCR,LMS.AT_Device\CurVer,,,"LMS.AT_Device.1"
+HKCR,LMS.AT_Device.1,,,"AT_Device Class"
+HKCR,LMS.AT_Device.1\CLSID,,,"{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2}"
+
+HKCR,WOW6432Node\CLSID\{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2},,,"AT_Device Class"
+HKCR,WOW6432Node\CLSID\{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2},"AppID",,"{545C8D56-7A88-492D-B38D-559657A3DD4C}"
+HKCR,WOW6432Node\CLSID\{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2}\LocalServer32,,%REG_EXPAND_SZ%,"%13%\LMS.exe"
+HKCR,WOW6432Node\CLSID\{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2}\ProgID,,,"LMS.AT_Device.1"
+HKCR,WOW6432Node\CLSID\{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2}\Programmable,,%FLG_ADDREG_KEYONLY%
+HKCR,WOW6432Node\CLSID\{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,WOW6432Node\CLSID\{FA1F00CD-4445-401B-ADDF-FA4126EAA7C2}\VersionIndependentProgID,,,"LMS.AT_Device"
+
+HKCR,Interface\{795982AA-D73D-4242-AEDD-2C0116B3E5F9},,,"IAT_Device"
+HKCR,Interface\{795982AA-D73D-4242-AEDD-2C0116B3E5F9}\ProxyStubClsid32,,,"{00020424-0000-0000-C000-000000000046}"
+HKCR,Interface\{795982AA-D73D-4242-AEDD-2C0116B3E5F9}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,Interface\{795982AA-D73D-4242-AEDD-2C0116B3E5F9}\TypeLib,"Version",,"1.0"
+
+
+;Manageability_Commands
+HKCR,UNS.Manageability_Commands,,,"Manageability_Commands Class"
+HKCR,UNS.Manageability_Commands\CLSID,,,"{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A}"
+HKCR,UNS.Manageability_Commands\CurVer,,,"UNS.Manageability_Commands.1"
+HKCR,UNS.Manageability_Commands.1,,,"Manageability_Commands Class"
+HKCR,UNS.Manageability_Commands.1\CLSID,,,"{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A}"
+
+HKCR,WOW6432Node\CLSID\{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A},,,"Manageability_Commands Class"
+HKCR,WOW6432Node\CLSID\{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A},"AppID",,"{545C8D56-7A88-492D-B38D-559657A3DD4C}"
+HKCR,WOW6432Node\CLSID\{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A}\LocalServer32,,%REG_EXPAND_SZ%,"%13%\LMS.exe"
+HKCR,WOW6432Node\CLSID\{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A}\ProgID,,,"UNS.Manageability_Commands.1"
+HKCR,WOW6432Node\CLSID\{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A}\Programmable,,%FLG_ADDREG_KEYONLY%
+HKCR,WOW6432Node\CLSID\{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,WOW6432Node\CLSID\{7CABC14E-7C51-4AAA-AE3F-CFEB42D5016A}\VersionIndependentProgID,,,"UNS.Manageability_Commands"
+
+HKCR,Interface\{86D71C1F-A911-4A55-A455-C7E4111C8EDF},,,"IManageability_Commands"
+HKCR,Interface\{86D71C1F-A911-4A55-A455-C7E4111C8EDF}\ProxyStubClsid32,,,"{00020424-0000-0000-C000-000000000046}"
+HKCR,Interface\{86D71C1F-A911-4A55-A455-C7E4111C8EDF}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,Interface\{86D71C1F-A911-4A55-A455-C7E4111C8EDF}\TypeLib,"Version",,"1.0"
+
+
+;PTHI_Commands
+HKCR,UNS.PTHI_Commands,,,"PTHI_Commands Class"
+HKCR,UNS.PTHI_Commands\CLSID,,,"{80C25488-192B-4DE2-8150-5B2D2A2F835E}"
+HKCR,UNS.PTHI_Commands\CurVer,,,"UNS.PTHI_Commands.1"
+HKCR,UNS.PTHI_Commands.1,,,"PTHI_Commands Class"
+HKCR,UNS.PTHI_Commands.1\CLSID,,,"{80C25488-192B-4DE2-8150-5B2D2A2F835E}"
+
+HKCR,WOW6432Node\CLSID\{80C25488-192B-4DE2-8150-5B2D2A2F835E},,,"PTHI_Commands Class"
+HKCR,WOW6432Node\CLSID\{80C25488-192B-4DE2-8150-5B2D2A2F835E},"AppID",,"{545C8D56-7A88-492D-B38D-559657A3DD4C}"
+HKCR,WOW6432Node\CLSID\{80C25488-192B-4DE2-8150-5B2D2A2F835E}\LocalServer32,,%REG_EXPAND_SZ%,"%13%\LMS.exe"
+HKCR,WOW6432Node\CLSID\{80C25488-192B-4DE2-8150-5B2D2A2F835E}\ProgID,,,"UNS.PTHI_Commands.1"
+HKCR,WOW6432Node\CLSID\{80C25488-192B-4DE2-8150-5B2D2A2F835E}\Programmable,,%FLG_ADDREG_KEYONLY%
+HKCR,WOW6432Node\CLSID\{80C25488-192B-4DE2-8150-5B2D2A2F835E}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,WOW6432Node\CLSID\{80C25488-192B-4DE2-8150-5B2D2A2F835E}\VersionIndependentProgID,,,"UNS.PTHI_Commands"
+
+HKCR,Interface\{7F500119-6CE4-42F2-8AF9-FD602BEC79F7},,,"IPTHI_Commands"
+HKCR,Interface\{7F500119-6CE4-42F2-8AF9-FD602BEC79F7}\ProxyStubClsid32,,,"{00020424-0000-0000-C000-000000000046}"
+HKCR,Interface\{7F500119-6CE4-42F2-8AF9-FD602BEC79F7}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,Interface\{7F500119-6CE4-42F2-8AF9-FD602BEC79F7}\TypeLib,"Version",,"1.0"
+
+
+;UNSAlert
+HKCR,UNS.UNSAlert,,,"UNSAlert Class"
+HKCR,UNS.UNSAlert\CLSID,,,"{64417EAE-2E0E-45E8-A8C1-03284E3D3587}"
+HKCR,UNS.UNSAlert\CurVer,,,"UNS.UNSAlert.1"
+HKCR,UNS.UNSAlert.1,,,"UNSAlert Class"
+HKCR,UNS.UNSAlert.1\CLSID,,,"{64417EAE-2E0E-45E8-A8C1-03284E3D3587}"
+
+HKCR,WOW6432Node\CLSID\{64417EAE-2E0E-45E8-A8C1-03284E3D3587},,,"UNSAlert Class"
+HKCR,WOW6432Node\CLSID\{64417EAE-2E0E-45E8-A8C1-03284E3D3587},"AppID",,"{545C8D56-7A88-492D-B38D-559657A3DD4C}"
+HKCR,WOW6432Node\CLSID\{64417EAE-2E0E-45E8-A8C1-03284E3D3587}\LocalServer32,,%REG_EXPAND_SZ%,"%13%\LMS.exe"
+HKCR,WOW6432Node\CLSID\{64417EAE-2E0E-45E8-A8C1-03284E3D3587}\ProgID,,,"UNS.UNSAlert.1"
+HKCR,WOW6432Node\CLSID\{64417EAE-2E0E-45E8-A8C1-03284E3D3587}\Programmable,,%FLG_ADDREG_KEYONLY%
+HKCR,WOW6432Node\CLSID\{64417EAE-2E0E-45E8-A8C1-03284E3D3587}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,WOW6432Node\CLSID\{64417EAE-2E0E-45E8-A8C1-03284E3D3587}\VersionIndependentProgID,,,"UNS.UNSAlert"
+
+HKCR,Interface\{0B810B0A-AF72-4974-B47C-BFC1C0C4F770},,,"IUNSAlert"
+HKCR,Interface\{0B810B0A-AF72-4974-B47C-BFC1C0C4F770}\ProxyStubClsid32,,,"{00020424-0000-0000-C000-000000000046}"
+HKCR,Interface\{0B810B0A-AF72-4974-B47C-BFC1C0C4F770}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,Interface\{0B810B0A-AF72-4974-B47C-BFC1C0C4F770}\TypeLib,"Version",,"1.0"
+
+HKCR,Interface\{4963AF6F-AFE7-4928-95A6-3AF77F17A646},,,"_IUNSAlertEvents"
+HKCR,Interface\{4963AF6F-AFE7-4928-95A6-3AF77F17A646}\ProxyStubClsid32,,,"{00020420-0000-0000-C000-000000000046}"
+HKCR,Interface\{4963AF6F-AFE7-4928-95A6-3AF77F17A646}\TypeLib,,,"{9853D245-3E9D-4946-895A-F30D6396DEA6}"
+HKCR,Interface\{4963AF6F-AFE7-4928-95A6-3AF77F17A646}\TypeLib,"Version",,"1.0"
+
+
+; --------- Files ----------------------
+[LMS_Files]
+FWUpdateLib_11.dll
+FWUpdateLib_12.dll
+ComEventHandler.dll
+Configurator.dll
+EventManager.dll
+GmsCommon.dll
+HistoryEventHandler.dll
+HostChangesNotificationService.dll
+IPRefreshService.dll
+LMS.exe
+PartialFWUpdateService.dll
+PortForwardingService.dll
+PowerOperationsService.dll
+SharedStaticIPService.dll
+StatusEventHandler.dll
+TimeSyncService.dll
+WinLogEventHandler.dll
+WMIEventHandler.dll
+ACE.dll
+WsmanClient.dll
+WiFiProfileSyncService.dll
+1100_PD_PFU.BIN
+1100_PP_PFU.BIN
+1105_PD_PFU.BIN
+1105_PP_PFU.BIN
+1106_PD_PFU.BIN
+1106_PP_PFU.BIN
+1108_PD_PFU.BIN
+1108_PP_PFU.BIN
+1200_PD_PFU.BIN
+1200_PP_PFU.BIN
+1300_PD_PFU.BIN
+1300_PP_PFU.BIN
+1400_PD_PFU.BIN
+1400_PP_PFU.BIN
+
+[Strings]
+SPSVCSINST_STARTSERVICE= 0x00000800
+FLG_ADDREG_TYPE_SZ=0x00000000
+FLG_ADDREG_TYPE_DWORD=0x00010001
+
+LMSDescription="Intel(R) Management and Security Application Local Management"
+DiskId = "Intel(R) Management and Security Application Local Management Installation Disk"
+ManufacturerName="Intel"
+FLG_ADDREG_KEYONLY = 0x00000010
+REG_EXPAND_SZ = 0x00020000

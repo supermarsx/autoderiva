@@ -1,0 +1,530 @@
+;
+; ESAuDriver.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=MEDIA ; TODO: edit Class
+ClassGuid={4d36e96c-e325-11ce-bfc1-08002be10318} ; TODO: edit ClassGuid
+Provider = Everest Semiconductor Co., Ltd
+CatalogFile=ESAuDriver.cat
+DriverVer = 08/24/2021,1.0.2.4
+PnpLockdown=1
+[DestinationDirs]
+DefaultDestDir = 12
+ESAuDriver_Device_CoInstaller_CopyFiles = 11
+
+; ================= Class section =====================
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+ESAuDriver.sys  = 1,,
+;
+
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName%=Standard,NTamd64
+
+[Standard.NTamd64]
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_8326, ACPI\ESSX8326 ; TODO: edit hw-id
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device, ACPI\ESSX8336 ; TODO: edit hw-id
+
+;Emdoor
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_278202A0, ACPI\VEN_ESSX&DEV_8326&SUBSYS_278202A0 ; Emdoor CM618 for dolby, 8326, no Oscillator
+
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27821A30, ACPI\VEN_ESSX&DEV_8326&SUBSYS_27821A00 ; Emdoor IG116_200B_V2.0, 8326, no Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27821A30, ACPI\VEN_ESSX&DEV_8326&SUBSYS_27821A30 ; Emdoor TG820/TG526/TG819, 8326, no Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27821A30, ACPI\VEN_ESSX&DEV_8326&SUBSYS_27821A40 ; Emdoor JS8318, 8326, no Oscillator
+
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27821A20, ACPI\VEN_ESSX&DEV_8326&SUBSYS_27821A20 ; Emdoor IC918, 8326, no Oscillator
+
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27821A00, ACPI\VEN_ESSX&DEV_8326&SUBSYS_27821A10 ; Emdoor CM819, 8326, no Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27821A00, ACPI\VEN_ESSX&DEV_8326&SUBSYS_27821A60 ; Emdoor CF819, 8326, no Oscillator
+
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27820160, ACPI\VEN_ESSX&DEV_8336&SUBSYS_27820B60	;Emdoor CM525-S(CF), 8336, has Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27820160, ACPI\VEN_ESSX&DEV_8336&SUBSYS_27820B00	;Emdoor IG136 8336, has Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27820160, ACPI\VEN_ESSX&DEV_8336&SUBSYS_27820110	;Emdoor CM525-PRO_V2.08336, has Oscillator
+
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27820010, ACPI\VEN_ESSX&DEV_8336&SUBSYS_27820010	;Emdoor CM525_V2.0/CM218_V3.0 8336, no Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Emdoor_27820010, ACPI\VEN_ESSX&DEV_8336&SUBSYS_27820000	;Emdoor IG218/IG118/G8811 8336, no Oscillator
+
+;Marata
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_Murata10EC1234, ACPI\VEN_ESSX&DEV_8336&SUBSYS_0x10EC1234 ; marata for equalizer
+
+;WEIBU_RD1
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_WEIBU_1C6CB001, ACPI\VEN_ESSX&DEV_8326&SUBSYS_1C6CB001 ;WEIBU 1C6CB001 ,XU133SR631, 8326, no Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_WEIBU_1C6CB001, ACPI\VEN_ESSX&DEV_8326&SUBSYS_1C6CC001 ;WEIBU 1C6CC001 ,TU140TR120, 8326, no Oscillator
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_WEIBU_1C6CC002, ACPI\VEN_ESSX&DEV_8326&SUBSYS_1C6CC002 ;WEIBU 1C6CC002 ,T140JR110, 8326, no Oscillator
+
+;WEIBU_RD2
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_WEIBU_1C6CC002, ACPI\VEN_ESSX&DEV_8326&SUBSYS_1C6C1A20 ;WEIBU 1C6C1A20 ,8326, no Oscillator
+
+;MAI DI JIE
+%ESAuDriver.DeviceDesc%=ESAuDriver_Device_MDJ_12970123, ACPI\VEN_ESSX&DEV_8326&SUBSYS_12970123 ;MAI DI JIE 12970123, 8326, no Oscillator
+
+
+[ESAuDriver_Device.NT]
+CopyFiles=Drivers_Dir
+AddReg=ESAuDriver_Device_RegAdd
+
+[ESAuDriver_Device_8326.NT]
+CopyFiles=Drivers_Dir
+AddReg=ESAuDriver_Device_8326_RegAdd
+
+[ESAuDriver_Device_Murata10EC1234.NT]
+CopyFiles=Drivers_Dir
+AddReg=ESAuDriver_Device_Murata10EC1234_RegAdd
+
+[ESAuDriver_Device_Emdoor_278202A0.NT]
+CopyFiles=Drivers_Dir
+AddReg=ESAuDriver_Device_Emdoor_278202A0_RegAdd
+
+[ESAuDriver_Device_Emdoor_27821A00.NT]
+CopyFiles=Drivers_Dir
+AddReg=ESAuDriver_Device_Emdoor_27821A00_RegAdd
+
+[ESAuDriver_Device_Emdoor_27821A20.NT]
+CopyFiles=Drivers_Dir
+AddReg=ESAuDriver_Device_Emdoor_27821A20_RegAdd
+
+[ESAuDriver_Device_Emdoor_27820160.NT]
+CopyFiles=Drivers_Dir
+AddReg= ESAuDriver_Device_Emdoor_27820160_RegAdd
+
+[ESAuDriver_Device_Emdoor_27820010.NT]
+CopyFiles=Drivers_Dir
+AddReg= ESAuDriver_Device_Emdoor_27820010_RegAdd
+
+[ESAuDriver_Device_Emdoor_27821A30.NT]
+CopyFiles=Drivers_Dir
+AddReg= ESAuDriver_Device_Emdoor_27821A30_RegAdd
+
+[ESAuDriver_Device_WEIBU_1C6CB001.NT]
+CopyFiles=Drivers_Dir
+AddReg= ESAuDriver_Device_WEIBU_1C6CB001_RegAdd
+
+[ESAuDriver_Device_WEIBU_1C6CC002.NT]
+CopyFiles=Drivers_Dir
+AddReg= ESAuDriver_Device_WEIBU_1C6CC002_RegAdd
+
+[ESAuDriver_Device_MDJ_12970123.NT]
+CopyFiles=Drivers_Dir
+AddReg= ESAuDriver_Device_MDJ_12970123_RegAdd
+
+;--------------------------------------------------------------------------------------------------------------------------------------------------
+; Registry 
+;---------------------------------------------------------------------------------------------------------------------------------------------------
+[ESAuDriver_Device_RegAdd]
+;HKR, ESAuDsetting, PrivateDeviceData,0x10001, 8336     ;codec number
+;HKR, ESAuDsetting, Platform_i2s_bus_num,0x10001, 0     ;bit[7:4]=data slot number, bit[3:0] = I2S Bus number ;I2S Bus number = 0, slot number = 0
+;HKR, ESAuDsetting, Codec_PCM_FMT,0x10001, 4     ;0-I2S, 1-LJ, 2-RJ, 3-DSPA, 4-DSPB, default 24bit
+;HKR,ESAuDsetting,Platform_mclk_freq,0x10001,2		;0=19.2MHZ, 1= 24MHZ, 2=12.288MHZ, 3=24.576MHZ, 5-48MHZ
+;HKR,ESAuDsetting,Platform_bclk_freq,0x10001,0		;0=4.8MHZ, 1=2.4MHZ,2=2.304MHZ, 3=3.072MHZ, 4= 4.096MHZ
+
+;HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,1			;1=Headphone detect inverted, 0=headphone detect normal
+
+;HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,2		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+
+;HKR,ESAuDsetting,Platform_mainmic_type,0x10001,0xbb		;main mic is located in LIN1RIN1
+;HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN2RIN2
+;HKR,ESAuDsetting,MIC_Property_GUI_STEP,0x10001,3		;headphone microphone gain step = 3db/step
+;HKR,ESAuDsetting,MIC_Property_GUI_RANGE,0x10001,27		;headphone microphone gain range = 3db/step
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;**********************************************************************************************************
+; DRC (only for es8326)
+;**********************************************************************************************************
+;HKR,ESAuDsetting,DAC_DRC_Enable,0x10001,0			;spk DRC enable
+;HKR,ESAuDsetting,DAC_DRC_Level,0x10001,0xbf		;spk DRC LEVEL
+;HKR,ESAuDsetting,DAC_DRC_Limit,0x10001,0x00		;spk DRC limit
+;HKR,ESAuDsetting,DAC_DRC_Recovery,0x10001,0x00		;spk DRC Recovery
+;HKR,ESAuDsetting,DAC_DRC_Winsize,0x10001,0x00		;spk DRC Winsize
+
+;**********************************************************************************************************
+; main mic ALC setting
+;**********************************************************************************************************
+;HKR,ESAuDsetting,ADC_Main_ALC_Enable,0x10001,0			;main MIC ALC enable
+;HKR,ESAuDsetting,ADC_Main_ALC_TargetLevel,0x10001,0xbf		;main MIC ALC Target level
+;HKR,ESAuDsetting,ADC_Main_ALC_HoldTime,0x10001,0x00		;main MIC ALC Hold Time
+;HKR,ESAuDsetting,ADC_Main_ALC_AttackTime,0x10001,0x00		;main MIC ALC Attack Time
+;HKR,ESAuDsetting,ADC_Main_ALC_MaxGain,0x10001,0x00		;main MIC ALC MaxGain
+;HKR,ESAuDsetting,ADC_Main_ALC_MinGain,0x10001,0			;main MIC ALC MinGain
+;HKR,ESAuDsetting,ADC_Main_ALC_DecayTime,0x10001,0xbf		;main MIC ALC DecayTime
+;HKR,ESAuDsetting,ADC_Main_ALC_NGType,0x10001,0x00		;main MIC ALC Noise Gate Type
+;HKR,ESAuDsetting,ADC_Main_ALC_NGThreshold,0x10001,0x00		;main MIC ALC Noise Gate Threshold
+
+;**********************************************************************************************************
+; headset mic ALC setting
+;**********************************************************************************************************
+;HKR,ESAuDsetting,ADC_Hp_ALC_Enable,0x10001,0			;Headset MIC ALC enable
+;HKR,ESAuDsetting,ADC_Hp_ALC_TargetLevel,0x10001,0xbf		;Headset MIC ALC Target level
+;HKR,ESAuDsetting,ADC_Hp_ALC_HoldTime,0x10001,0x00		;Headset MIC ALC Hold Time
+;HKR,ESAuDsetting,ADC_Hp_ALC_AttackTime,0x10001,0x00		;Headset MIC ALC Attack Time
+;HKR,ESAuDsetting,ADC_Hp_ALC_MaxGain,0x10001,0xf0		;Headset MIC ALC MaxGain
+;HKR,ESAuDsetting,ADC_Hp_ALC_MinGain,0x10001,0			;Headset MIC ALC MinGain
+;HKR,ESAuDsetting,ADC_Hp_ALC_DecayTime,0x10001,0xbf		;Headset MIC ALC DecayTime
+;HKR,ESAuDsetting,ADC_Hp_ALC_NGType,0x10001,0x00		;Headset MIC ALC Noise Gate Type
+;HKR,ESAuDsetting,ADC_Hp_ALC_NGThreshold,0x10001,0x00		;Headset MIC ALC Noise Gate Threshold
+;******************************************************************************************************************
+; default setting
+;******************************************************************************************************************
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+
+;HKR,ESAuDsetting,ADC_Hp_ALC_MaxGain,0x10001,0x0d		;Headset MIC ALC MaxGain
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,7			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,0		;headphone Microphone Boost
+HKR,ESAuDsetting,Main_Codec_d2sepga_gain,0x10001,0		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+HKR,ESAuDsetting,HeadphoneInsert_Retry_Time,0x10001,10		;headphone insert detect, retry time = 25
+HKR,ESAuDsetting,HeadphoneRemove_Retry_Time,0x10001,10		;headphone remove detect, retry time = 55
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_8326_RegAdd]
+HKR,ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,0			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,2 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+HKR,ESAuDsetting,Reg56_Setting,0x10001,0xff		;set reg0x56 value
+
+HKR,ESAuDsetting,ADC_Hp_ALC_MaxGain,0x10001,0xf5		;Headset MIC ALC MaxGain
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,7			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,0		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+HKR,ESAuDsetting,Hp_codec_dac_hplmix_volume,0x10001,1		;MIXER Volume = 0dB
+HKR,ESAuDsetting,Hp_codec_dac_hprmix_volume,0x10001,1		;MIXER Volume = 0dB
+HKR,ESAuDsetting,Spk_codec_dac_hplmix_volume,0x10001,2		;MIXER Volume = 1dB
+HKR,ESAuDsetting,Spk_codec_dac_hprmix_volume,0x10001,2		;MIXER Volume = 1dB
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_Murata10EC1234_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 1     ;0-NO Oscillator, 1-Oscillator
+
+HKR, ESAuDsetting, Codec_Equalizer_OnOff,0x10001,1		;0-equalizer disable, 1-equalizer enable
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,2		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+
+;HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,7			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,0		;headphone Microphone Boost
+
+;HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+;HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_Emdoor_27820160_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 1     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,6			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,0		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_Emdoor_27820010_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,6		;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+HKR,ESAuDsetting,Main_Codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+HKR,ESAuDsetting,ADC_Main_ALC_MaxGain,0x10001,0x0c
+HKR,ESAuDsetting,ADC_Main_ALC_MinGain,0x10001,0x07
+HKR,ESAuDsetting,ADC_Main_ALC_DecayTime,0x10001,0x01
+HKR,ESAuDsetting,ADC_Hp_ALC_MaxGain,0x10001,0x0a		;Headset MIC ALC MaxGain
+HKR,ESAuDsetting,ADC_Hp_ALC_MinGain,0x10001,0x07
+HKR,ESAuDsetting,ADC_Hp_ALC_TargetLevel,0x10001,0x0a		
+
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+HKR,ESAuDsetting,HeadphoneInsert_Retry_Time,0x10001,10		;headphone insert detect, retry time = 25
+HKR,ESAuDsetting,HeadphoneRemove_Retry_Time,0x10001,10		;headphone remove detect, retry time = 55
+
+[ESAuDriver_Device_Emdoor_278202A0_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,0			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,3 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,8			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_Emdoor_27821A00_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,0			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,3 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,8			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_Emdoor_27821A20_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+;HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,0			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,3 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,8			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_Emdoor_27821A30_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,1			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,3 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,8			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_WEIBU_1C6CB001_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,0			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,2 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,8			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_WEIBU_1C6CC002_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,0			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,3 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,8			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+[ESAuDriver_Device_MDJ_12970123_RegAdd]
+HKR, ESAuDsetting, Platform_With_Oscillator,0x10001, 0     ;0-NO Oscillator, 1-Oscillator
+HKR, ESAuDsetting, Platform_SpkGpio_ControlMode,0x10001,0		;speaker io mode, 0- normal mode, 1-one pulse, 2-two pulse, 3-three pulse, 4-four pulse
+HKR,ESAuDsetting,Platform_hpdet_inv,0x10001,1			;1=Headphone detect inverted, 0=headphone detect normal
+HKR,ESAuDsetting,Headphone_GMS01_Type,0x10001,3 ;Reg0x57.HP_TYPE, 0 and 1 = auto check; 2 = GMS0 GND; 3=GMS1 GND
+HKR,ESAuDsetting,Platform_hpmic_type,0x10001,0xbb		;headphone Microphone is located in LIN1RIN1
+
+HKR,ESAuDsetting,Hp_codec_linin_gain,0x10001,8			;headphone microphone PGA gain, default 21db
+HKR,ESAuDsetting,Hp_codec_d2sepga_gain,0x10001,1		;headphone Microphone Boost
+
+HKR,ESAuDsetting,Hp_codec_dac_lrswap,0x10001,0		;in headphone mode, dac LR swap
+HKR,ESAuDsetting,Spk_codec_dac_lrswap,0x10001,0		;in Speaker mode, dac LR swap
+
+;HKR,ESAuDsetting,Hp_codec_dac_volume,0x10001,0			;headphone Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+;HKR,ESAuDsetting,Spk_codec_dac_volume,0x10001,0			;Speaker Volume, 0 is maximum volume; the volume will be decreased with 0.5dB/1 step
+
+HKR,ESAuDsetting,Hp_Mute,0x10001,0		;headphone mute
+HKR,ESAuDsetting,Spk_Mute,0x10001,0		;speaker mute
+HKR,ESAuDsetting,MainMic_Mute,0x10001,0		;mainmic mute
+HKR,ESAuDsetting,HpMic_Mute,0x10001,0		;HpMIC Mute
+
+
+
+[Drivers_Dir]
+ESAuDriver.sys
+
+;-------------- Service installation-------------------------------------------------------------------------------------------
+[ESAuDriver_Device.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_Murata10EC1234.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_Emdoor_27820160.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_Emdoor_27820010.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_Emdoor_278202A0.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_Emdoor_27821A00.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_Emdoor_27821A20.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_Emdoor_27821A30.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_WEIBU_1C6CB001.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_WEIBU_1C6CC002.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_MDJ_12970123.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+[ESAuDriver_Device_8326.NT.Services]
+AddService = ESAuDriver,%SPSVCINST_ASSOCSERVICE%, ESAuDriver_Service_Inst
+
+
+; -------------- ESAuDriver driver install sections-----------------------------------------------------------
+[ESAuDriver_Service_Inst]
+DisplayName    = %ESAuDriver.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\ESAuDriver.sys
+
+[ESAuDriver_Device.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_8326.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_Murata10EC1234.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_Emdoor_27820160.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_Emdoor_27820010.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_Emdoor_278202A0.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_Emdoor_27821A00.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_Emdoor_27821A20.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_Emdoor_27821A30.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_WEIBU_1C6CB001.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_WEIBU_1C6CC002.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_Device_MDJ_12970123.NT.Wdf]
+KmdfService =  ESAuDriver, ESAuDriver_wdfsect
+
+[ESAuDriver_wdfsect]
+KmdfLibraryVersion = 1.15
+
+[Strings]
+SPSVCINST_ASSOCSERVICE= 0x00000002
+EVEREST="Everest Semiconductor"
+ManufacturerName="Everest Semiconductor Co., Ltd" ;TODO: Replace with your manufacturer name
+;ClassName="\Device\HW_CODEC" ; TODO: edit ClassName
+;ClassName ="Samples"
+DiskName = "ESAuDriver Installation Disk"
+ESAuDriver.DeviceDesc = "ESAuDriver Device"
+ESAuDriver.SVCDESC = "ESAuDriver Service"

@@ -1,0 +1,123 @@
+;/*++
+;
+;Copyright (c) 2009-2013 Realtek Semiconductor Corporation All rights Reserved
+;
+;Module Name:
+;
+;    Btfilter.INF
+;
+;HP_AX
+;
+;--*/
+[Version]
+Signature   = "$WINDOWS NT$"
+Class=Bluetooth
+CLASSGUID={e0cbf06c-cd8b-4647-bb8a-263b43f0f974}
+CatalogFile= RtkFilter.cat
+Provider    = %REALTEK%
+DriverVer = 05/15/2023,1.10.1061.3005
+;*************************
+; Source file information
+;*************************
+[SourceDisksNames]
+1 = %DiskId1%,,,""
+[SourceDisksFiles]
+RtkBtfilter.sys         = 1,,
+RtkBtManServ.exe	= 1,,      ;RtkServ
+PidVid_List.dat		= 1
+rtl8851b_mp_chip_bt40_fw_asic_rom_patch_new.dat             =   1
+rtl8852a_mp_chip_bt40_fw_asic_rom_patch_new.dat             =   1
+rtl8852b_mp_chip_bt40_fw_asic_rom_patch_new.dat             =   1
+rtl8852c_mp_chip_bt40_fw_asic_rom_patch_new.dat             =   1
+;*************************
+; Destination information
+;*************************
+[DestinationDirs]
+RsBthFilter.CopyList = 12
+RsBthpatch.CopyList = 10
+RtkBtManServ.CopyList = 10                      ;RtkServ
+[RsBthFilter.CopyList]
+RtkBtfilter.sys
+[RtkBtManServ.CopyList]                         ;RtkServ
+RtkBtManServ.exe                                ;RtkServ
+[RsBthpatch.CopyList]
+PidVid_List,PidVid_List.dat,,0x00002000
+rtl8851b_mp_chip_bt40_fw_asic_rom_patch_new,rtl8851b_mp_chip_bt40_fw_asic_rom_patch_new.dat,,0x00002000
+rtl8852a_mp_chip_bt40_fw_asic_rom_patch_new,rtl8852a_mp_chip_bt40_fw_asic_rom_patch_new.dat,,0x00002000  
+rtl8852b_mp_chip_bt40_fw_asic_rom_patch_new,rtl8852b_mp_chip_bt40_fw_asic_rom_patch_new.dat,,0x00002000 
+rtl8852c_mp_chip_bt40_fw_asic_rom_patch_new,rtl8852c_mp_chip_bt40_fw_asic_rom_patch_new.dat,,0x00002000 
+;*************************
+; Manufacturer information
+;*************************
+[Manufacturer]
+%REALTEK% = Realtek,NTamd64.10.0
+;We only support Vista and later
+[Realtek]
+
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_2852			;RTL8852AE	
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_1852			;RTL8852AE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_3852			;RTL8852AE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_385A			;RTL8852AE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_B85C			;RTL8852BE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_B85D			;RTL8852BE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_C85C			;RTL8852CE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_B85E           ;RTL8851BE
+	
+[Realtek.NTamd64.10.0]
+
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_2852			;RTL8852AE	
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_1852			;RTL8852AE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_3852			;RTL8852AE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_385A			;RTL8852AE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_B85C			;RTL8852BE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_B85D			;RTL8852BE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_C85C			;RTL8852CE
+%HP52AX.DeviceDesc%		=	RsBthFilter, USB\VID_0BDA&PID_B85E           ;RTL8851BE
+
+
+[RsBthFilter.NT]
+Include=bth.inf
+Needs=BthUsb.NT
+CopyFiles=RsBthFilter.CopyList
+CopyFiles=RsBthpatch.CopyList
+CopyFiles=RtkBtManServ.CopyList                   ;RtkServ
+[RsBthFilter.NT.HW]
+include    = bth.inf
+needs      = BthUsb.NT.HW
+AddReg=RsBthFilter.NT.HW.Reg
+[RsBthFilter.NT.HW.Reg]
+HKR, , LowerFilters, 0x00010000, RtkBtFilter
+HKR, ,"RemoteWakeEnabled",0x00010001,1
+HKR, ,"DeviceRemoteWakeSupported",0x00010001,1
+HKR, ,"VsMsftOpCode",0x00010001,0Xfcf0
+[RsBthFilter.NT.Services]
+include    = bth.inf
+needs      = BthUsb.NT.Services
+AddService = RtkBtFilter, , RtkBtFilter_Service_Inst
+AddService = RtkBtManServ, 0x00000800, RtkBtManServ_Service_Inst     ;RtkServ
+[RtkBtFilter_Service_Inst]
+DisplayName     = %BtFilt.SvcDesc%                            
+ServiceType     = 1                  ; SERVICE_KERNEL_DRIVER
+StartType       = 3                  ; SERVICE_DEMAND_START
+ErrorControl    = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary   = %12%\RtkBtfilter.sys                            
+LoadOrderGroup = PNP Filter  
+AddReg=RsBthFilter_Services_Inst_AddReg
+[RsBthFilter_Services_Inst_AddReg]
+HKR,"Parameters","bPatchInSystemRoot",0x00010001,1    ; SetBit
+HKR,"Parameters","NewNotify",0x00010001,1    ; SetBit
+[RtkBtManServ_Service_Inst]                                        ;RtkServ
+DisplayName     = %RtkBtManServ.SvcDesc%                               ;RtkServ
+ServiceType     = 0x10                  ; Service                  ;RtkServ
+StartType       = 2                  ; SERVICE_DEMAND_START        ;RtkServ
+ErrorControl    = 0                  ; SERVICE_ERROR_NORMAL        ;RtkServ
+ServiceBinary   = %10%\RtkBtManServ.exe                            ;RtkServ
+;*****************************************
+; Bluetooth Filter String Section
+;*****************************************
+[Strings]
+REALTEK		= "Realtek Semiconductor Corp."
+DiskId1			= "Realtek Bluetooth Filter Installation Disk #1"
+BtFilt.SvcDesc		= "Realtek Bluetooth Filter Driver"
+RtkBtManServ.SvcDesc	= "Realtek Bluetooth Device Manager Service"    ;RtkServ
+HP52AX.DeviceDesc		= "Realtek Wireless Bluetooth Adapter"
