@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Treat drivers and cuco as vendored/generated so GitHub Linguist ignores them in language stats
+drivers/** linguist-vendored
+cuco/** linguist-vendored

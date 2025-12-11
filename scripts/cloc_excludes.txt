@@ -1,0 +1,4 @@
+drivers
+cuco
+# You can add additional paths or directories (one per line) to exclude from cloc
+# For more precise exclusion add relative paths listed in driver_folders.txt
