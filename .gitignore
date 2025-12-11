@@ -1,3 +1,6 @@
-driver_folders.txt
+## Ignore the startup script (keep local copies if desired)
+/startup-script.ps1
+
+# You can add other local-only files or folders heredriver_folders.txt
 system_hardware_ids.csv
 language_summary.csv
