@@ -37,6 +37,11 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
+# Set Console Colors
+$Host.UI.RawUI.BackgroundColor = "DarkBlue"
+$Host.UI.RawUI.ForegroundColor = "White"
+Clear-Host
+
 $ErrorActionPreference = "Stop"
 $Script:RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ConfigFile = Join-Path $Script:RepoRoot "config.json"
@@ -189,6 +194,11 @@ function Write-AutoDerivaLog {
         "WARN"    { $CurrentLevel = "WARN" }
         "ERROR"   { $CurrentLevel = "ERROR" }
         "FATAL"   { $CurrentLevel = "FATAL" }
+        "SUCCESS" { $CurrentLevel = "INFO" }
+        "PROCESS" { $CurrentLevel = "INFO" }
+        "INSTALL" { $CurrentLevel = "INFO" }
+        "START"   { $CurrentLevel = "INFO" }
+        "DONE"    { $CurrentLevel = "INFO" }
         default   { $CurrentLevel = "INFO" }
     }
 
@@ -210,7 +220,8 @@ function Write-AutoDerivaLog {
         # File Output
         if ($LogFilePath) {
             $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            Add-Content -Path $LogFilePath -Value "[$timestamp] [$Status] $Message" -ErrorAction SilentlyContinue
+            # Use standardized level for log file consistency
+            Add-Content -Path $LogFilePath -Value "[$timestamp] [$CurrentLevel] $Message" -ErrorAction SilentlyContinue
         }
     }
 }
@@ -382,8 +393,15 @@ function Install-Driver {
     
     # Group matches by INF path to avoid duplicate downloads
     $UniqueInfs = $DriverMatches | Select-Object -ExpandProperty InfPath -Unique
+    $totalDrivers = $UniqueInfs.Count
+    $currentDriverIndex = 0
     
     foreach ($infPath in $UniqueInfs) {
+        $currentDriverIndex++
+        $driverPercent = [math]::Min(100, [int](($currentDriverIndex / $totalDrivers) * 100))
+        
+        Write-Progress -Id 1 -Activity "Installing Drivers" -Status "Processing $infPath ($currentDriverIndex/$totalDrivers)" -PercentComplete $driverPercent
+
         Write-AutoDerivaLog "PROCESS" "Processing driver: $infPath" "Cyan"
         
         # Find all files associated with this INF in the manifest
@@ -404,7 +422,7 @@ function Install-Driver {
             $fileName = Split-Path $file.RelativePath -Leaf
             $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
             
-            Write-Progress -Activity "Downloading Driver Files: $infPath" -Status "Downloading $fileName ($currentFileIndex/$totalFiles)" -PercentComplete $percentComplete
+            Write-Progress -Id 2 -ParentId 1 -Activity "Downloading Files" -Status "$fileName" -PercentComplete $percentComplete
 
             $remoteUrl = $Config.BaseUrl + $file.RelativePath
             # Reconstruct path in TempDir
@@ -413,7 +431,7 @@ function Install-Driver {
             Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
             $Script:Stats.FilesDownloaded++
         }
-        Write-Progress -Activity "Downloading Driver Files: $infPath" -Completed
+        Write-Progress -Id 2 -Completed
         
         # Install Driver
         # The INF file is at $TempDir + $infPath
@@ -435,6 +453,7 @@ function Install-Driver {
             Write-AutoDerivaLog "ERROR" "INF file not found after download: $LocalInfPath" "Red"
         }
     }
+    Write-Progress -Id 1 -Completed
 }
 
 <#
