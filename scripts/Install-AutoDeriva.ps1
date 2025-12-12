@@ -166,7 +166,6 @@ function Write-BrandHeader {
         '             ´ | ` ',
         '      ________ |________',
         '     \__________________/',
-        '',
         '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
         '   ~~~~~~\____/~~~~\____/~~~~\____/~~~~\____/~~~~~~',
         ' ~~~~~\____/~~~~\____/~~~~\____/~~~~\____/~~~~\____/~~~~'
@@ -635,7 +634,7 @@ function Install-Cuco {
     Write-AutoDerivaLog "INFO" "Downloading Cuco utility to: $TargetDir" "Cyan"
     
     try {
-        Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
+        $null = Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
         if (Test-Path $CucoDest) {
             Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded successfully." "Green"
         } else {
