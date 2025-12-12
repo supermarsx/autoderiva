@@ -394,7 +394,16 @@ function Install-Driver {
             continue
         }
         
+        $totalFiles = $DriverFiles.Count
+        $currentFileIndex = 0
+
         foreach ($file in $DriverFiles) {
+            $currentFileIndex++
+            $fileName = Split-Path $file.RelativePath -Leaf
+            $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
+            
+            Write-Progress -Activity "Downloading Driver Files: $infPath" -Status "Downloading $fileName ($currentFileIndex/$totalFiles)" -PercentComplete $percentComplete
+
             $remoteUrl = $Config.BaseUrl + $file.RelativePath
             # Reconstruct path in TempDir
             $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
@@ -402,6 +411,7 @@ function Install-Driver {
             Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
             $Script:Stats.FilesDownloaded++
         }
+        Write-Progress -Activity "Downloading Driver Files: $infPath" -Completed
         
         # Install Driver
         # The INF file is at $TempDir + $infPath
