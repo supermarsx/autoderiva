@@ -1,8 +1,18 @@
-$ErrorActionPreference = "Stop"
+<#
+.SYNOPSIS
+    Generates a file manifest for all files in the drivers directory.
 
-# Get-DriverFileManifest.ps1
-# Generates a complete list of all files in the 'drivers' directory with relative paths, sizes, and associated INF files.
-# This allows remote scripts to reconstruct driver packages by downloading individual files and knowing which INF they belong to.
+.DESCRIPTION
+    This script recursively lists all files in the 'drivers' directory.
+    For each file, it calculates the relative path and finds the nearest parent .inf file.
+    This association allows the installer to know which files belong to which driver package.
+    The output is saved to 'exports/driver_file_manifest.csv'.
+
+.EXAMPLE
+    .\scripts\Get-DriverFileManifest.ps1
+#>
+
+$ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $driversPath = Join-Path $repoRoot "drivers"
