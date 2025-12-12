@@ -28,14 +28,15 @@ function Main {
         # Get all present Plug and Play devices
         # We join the HardwareID array into a single string for CSV compatibility
         $devices = Get-PnpDevice -PresentOnly -ErrorAction Stop | 
-            Select-Object Class, FriendlyName, InstanceId, @{Name = "HardwareIDs"; Expression = { $_.HardwareID -join "; " } }
+        Select-Object Class, FriendlyName, InstanceId, @{Name = "HardwareIDs"; Expression = { $_.HardwareID -join "; " } }
 
         # Export to CSV
         $devices | Export-Csv -Path $outputFile -NoTypeInformation -Encoding utf8
 
         Write-Host "Found $( $devices.Count ) devices." -ForegroundColor Green
         Write-Host "Report saved to: $outputFile" -ForegroundColor Green
-    } catch {
+    }
+    catch {
         Write-Error "Failed to retrieve system hardware IDs: $_"
     }
 }
