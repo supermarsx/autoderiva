@@ -1,11 +1,11 @@
 # AutoDeriva
 
-[![CI](https://github.com/supermarsx/autoderiva/actions/workflows/ci.yml/badge.svg)](https://github.com/supermarsx/autoderiva/actions/workflows/ci.yml)
-![GitHub stars](https://img.shields.io/github/stars/supermarsx/autoderiva?style=social)
-![GitHub forks](https://img.shields.io/github/forks/supermarsx/autoderiva?style=social)
-![GitHub watchers](https://img.shields.io/github/watchers/supermarsx/autoderiva?style=social)
-![Repo Size](https://img.shields.io/github/repo-size/supermarsx/autoderiva)
-![Driver Count](https://img.shields.io/badge/Drivers-163+-blue)
+[![CI](https://img.shields.io/github/actions/workflow/status/supermarsx/autoderiva/ci.yml?branch=main&style=flat-square)](https://github.com/supermarsx/autoderiva/actions/workflows/ci.yml)
+![GitHub stars](https://img.shields.io/github/stars/supermarsx/autoderiva?style=flat-square)
+![GitHub forks](https://img.shields.io/github/forks/supermarsx/autoderiva?style=flat-square)
+![GitHub watchers](https://img.shields.io/github/watchers/supermarsx/autoderiva?style=flat-square)
+![Repo Size](https://img.shields.io/github/repo-size/supermarsx/autoderiva?style=flat-square)
+![Driver Count](https://img.shields.io/badge/Drivers-163+-blue?style=flat-square)
 
 
 **AutoDeriva** is a powerful, automated system setup and driver installer designed for remote and hybrid environments. It intelligently scans your system's hardware, matches it against a remote inventory of drivers, and automatically downloads and installs the necessary components.
