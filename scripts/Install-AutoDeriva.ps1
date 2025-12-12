@@ -141,26 +141,22 @@ function Write-BrandHeader {
     }
     Clear-Host
     
-    Write-Host @'
+    $Art = @(
+        "      |      "
+        "     /|      "
+        "    /_|      "
+        "  __| |__    "
+        "  \     /    "
+        "   \___/     "
+        "~~~~~~~~~~~~~"
+    )
     
-                  |
-                 /|
-                / |
-               /  |
-              /   |
-             /    |
-            /     |
-           /      |
-          /       |
-         /________|
-         |   __   |
-     ____|__|__|__|____
-     \                /
-      \  AUTODERIVA  /
-~~~~~~~~~~~~~~~~~~~~~~~~~~
- ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-                                                         
-'@ -ForegroundColor $Script:ColorHeader
+    $Rainbow = @('Red', 'DarkYellow', 'Yellow', 'Green', 'Cyan', 'Blue', 'Magenta', 'DarkMagenta')
+    
+    foreach ($Line in $Art) {
+        $Color = $Rainbow[$Art.IndexOf($Line) % $Rainbow.Count]
+        Write-Host $Line -ForegroundColor $Color
+    }
     
     Write-Host "   System Setup & Driver Installer" -ForegroundColor $Script:ColorDim
     Write-Host "   " ("=" * 60) -ForegroundColor $Script:ColorAccent
