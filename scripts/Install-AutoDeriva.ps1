@@ -184,6 +184,8 @@ function Write-BrandHeader {
         Write-Host $Art[$i] -ForegroundColor $Color
     }
     
+    Write-Host "`n"
+    Write-Host "   " ("=" * 60) -ForegroundColor $Script:ColorAccent
     Write-Host "   System Setup & Driver Installer" -ForegroundColor $Script:ColorDim
     Write-Host "   " ("=" * 60) -ForegroundColor $Script:ColorAccent
     Write-Host "`n"
