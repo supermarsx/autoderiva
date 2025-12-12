@@ -52,6 +52,8 @@ $DefaultConfig = @{
     ManifestPath = "exports/driver_file_manifest.csv"
     EnableLogging = $false
     LogLevel = "INFO"
+    DownloadAllFiles = $false
+    CucoBinaryPath = "cuco/CtoolGui.exe"
 }
 
 # Try to load local config first
@@ -437,6 +439,63 @@ function Install-Driver {
 
 <#
 .SYNOPSIS
+    Downloads the Cuco binary to the Desktop.
+#>
+function Install-Cuco {
+    Write-Section "Cuco Utility"
+    $DesktopPath = [Environment]::GetFolderPath("Desktop")
+    $CucoDest = Join-Path $DesktopPath "CtoolGui.exe"
+    $CucoUrl = $Config.BaseUrl + $Config.CucoBinaryPath
+
+    Write-AutoDerivaLog "INFO" "Downloading Cuco utility to Desktop..." "Cyan"
+    
+    try {
+        Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
+        if (Test-Path $CucoDest) {
+            Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded to: $CucoDest" "Green"
+        } else {
+            Write-AutoDerivaLog "ERROR" "Failed to verify Cuco download." "Red"
+        }
+    } catch {
+        Write-AutoDerivaLog "ERROR" "Failed to download Cuco: $_" "Red"
+    }
+}
+
+<#
+.SYNOPSIS
+    Downloads all files from the manifest to the temp directory.
+#>
+function Invoke-DownloadAllFile {
+    param($TempDir)
+    
+    Write-Section "Download All Files"
+    Write-AutoDerivaLog "INFO" "DownloadAllFiles is enabled. Fetching all files..." "Cyan"
+    
+    $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
+    $FileManifest = Get-RemoteCsv -Url $ManifestUrl
+    
+    $totalFiles = $FileManifest.Count
+    $currentFileIndex = 0
+    
+    foreach ($file in $FileManifest) {
+        $currentFileIndex++
+        $fileName = Split-Path $file.RelativePath -Leaf
+        $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
+        
+        Write-Progress -Activity "Downloading All Files" -Status "Downloading $fileName ($currentFileIndex/$totalFiles)" -PercentComplete $percentComplete
+        
+        $remoteUrl = $Config.BaseUrl + $file.RelativePath
+        $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
+        
+        Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
+        $Script:Stats.FilesDownloaded++
+    }
+    Write-Progress -Activity "Downloading All Files" -Completed
+    Write-AutoDerivaLog "SUCCESS" "All files downloaded to $TempDir" "Green"
+}
+
+<#
+.SYNOPSIS
     Main execution function.
 #>
 function Main {
@@ -446,10 +505,18 @@ function Main {
         
         Test-PreFlight
 
+        # Install Cuco
+        Install-Cuco
+
         # Create Temp Directory
         $TempDir = Join-Path $env:TEMP "AutoDeriva_$(Get-Random)"
         New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
         Write-AutoDerivaLog "INFO" "Temporary workspace: $TempDir" "Gray"
+
+        # Download All Files if configured
+        if ($Config.DownloadAllFiles) {
+            Invoke-DownloadAllFile -TempDir $TempDir
+        }
 
         # Get Hardware IDs
         $SystemHardwareIds = Get-SystemHardware

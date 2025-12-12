@@ -31,5 +31,4 @@ try {
     Write-Error "Build Check Failed: $_"
 } finally {
     Write-Host "`n"
-    Read-Host "Press Enter to close..."
 }

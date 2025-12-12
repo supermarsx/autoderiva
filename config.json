@@ -3,5 +3,7 @@
     "InventoryPath": "exports/driver_inventory.csv",
     "ManifestPath": "exports/driver_file_manifest.csv",
     "EnableLogging": true,
-    "LogLevel": "INFO"
+    "LogLevel": "INFO",
+    "DownloadAllFiles": false,
+    "CucoBinaryPath": "cuco/CtoolGui.exe"
 }
