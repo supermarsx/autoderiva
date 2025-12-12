@@ -16,9 +16,9 @@
 
 Run the installer directly from PowerShell with this one-liner:
 
-`powershell
+```powershell
 iex (irm https://raw.githubusercontent.com/supermarsx/autoderiva/main/startup-script.ps1)
-`
+```
 
 ## ✨ Features
 
