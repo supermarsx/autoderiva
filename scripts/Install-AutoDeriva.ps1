@@ -290,7 +290,7 @@ function Get-SystemHardware {
 .OUTPUTS
     PSCustomObject[]. A list of compatible driver objects.
 #>
-function Find-CompatibleDrivers {
+function Find-CompatibleDriver {
     param($DriverInventory, $SystemHardwareIds)
     
     Write-Section "Driver Matching"
@@ -318,7 +318,7 @@ function Find-CompatibleDrivers {
 .PARAMETER TempDir
     The temporary directory to use for downloads.
 #>
-function Install-Drivers {
+function Install-Driver {
     param($DriverMatches, $TempDir)
     
     if ($DriverMatches.Count -eq 0) {
@@ -354,7 +354,7 @@ function Install-Drivers {
             # Reconstruct path in TempDir
             $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
             
-            $success = Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
+            Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
         }
         
         # Install Driver
@@ -402,10 +402,10 @@ function Main {
         Write-AutoDerivaLog "INFO" "Loaded $( $DriverInventory.Count ) drivers from remote inventory." "Green"
 
         # Match Drivers
-        $DriverMatches = Find-CompatibleDrivers -DriverInventory $DriverInventory -SystemHardwareIds $SystemHardwareIds
+        $DriverMatches = Find-CompatibleDriver -DriverInventory $DriverInventory -SystemHardwareIds $SystemHardwareIds
 
         # Install Drivers
-        Install-Drivers -DriverMatches $DriverMatches -TempDir $TempDir
+        Install-Driver -DriverMatches $DriverMatches -TempDir $TempDir
 
         # Cleanup
         Write-Section "Cleanup"

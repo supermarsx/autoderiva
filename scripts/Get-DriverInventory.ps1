@@ -48,7 +48,7 @@ function Get-InfValue {
 .OUTPUTS
     PSCustomObject. An object containing driver details.
 #>
-function Parse-InfFile {
+function Get-InfData {
     param($InfFile, $RepoRoot)
     
     try {
@@ -114,7 +114,7 @@ function Main {
 
     foreach ($inf in $infFiles) {
         Write-Host "Processing $($inf.Name)..." -ForegroundColor Gray
-        $driverInfo = Parse-InfFile -InfFile $inf -RepoRoot $repoRoot
+        $driverInfo = Get-InfData -InfFile $inf -RepoRoot $repoRoot
         if ($driverInfo) {
             $results += $driverInfo
         }
