@@ -27,9 +27,11 @@ try {
     & "$PSScriptRoot\Test-Check.ps1"
 
     Write-Host "`nBuild Check Passed Successfully!" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Error "Build Check Failed: $_"
-} finally {
+}
+finally {
     Write-Host "`n"
     exit 0
 }

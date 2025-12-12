@@ -74,17 +74,17 @@ function Get-InfData {
         # Extract Hardware IDs (Simple heuristic scan)
         $hwidPattern = "(PCI|USB|ACPI|HID|HDAUDIO|BTH|DISPLAY|INTELAUDIO)\\[A-Za-z0-9_&-]+"
         $hwids = [Regex]::Matches($text, $hwidPattern, "IgnoreCase") | 
-            ForEach-Object { $_.Value.ToUpper() } | 
-            Select-Object -Unique
+        ForEach-Object { $_.Value.ToUpper() } | 
+        Select-Object -Unique
 
         return [PSCustomObject]@{
-            FileName     = $InfFile.Name
-            InfPath      = $InfFile.FullName.Substring($RepoRoot.Length + 1) # Renamed to InfPath for clarity
-            Class        = $class
-            Provider     = $provider
-            Date         = $date
-            Version      = $version
-            HardwareIDs  = ($hwids -join ";") # Removed space for cleaner parsing
+            FileName    = $InfFile.Name
+            InfPath     = $InfFile.FullName.Substring($RepoRoot.Length + 1) # Renamed to InfPath for clarity
+            Class       = $class
+            Provider    = $provider
+            Date        = $date
+            Version     = $version
+            HardwareIDs = ($hwids -join ";") # Removed space for cleaner parsing
         }
     }
     catch {
