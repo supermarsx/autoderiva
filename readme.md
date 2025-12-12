@@ -72,8 +72,4 @@ AutoDeriva can automatically download the **Cuco Utility** (\CtoolGui.exe\) to y
 *   \startup-script.ps1\: A lightweight bootstrapper to launch the installer.
 *   \Get-DriverInventory.ps1\: (Dev) Generates the driver inventory CSV.
 *   \Get-DriverFileManifest.ps1\: (Dev) Generates the file manifest for the repository.
-*   \dev-scripts/\: Contains build, lint, and test scripts for development.
-
----
-
-*Maintained by [supermarsx](https://github.com/supermarsx)*
+*   \dev-scripts\: Contains build, lint, and test scripts for development.
