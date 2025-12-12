@@ -42,6 +42,9 @@ $Host.UI.RawUI.BackgroundColor = "DarkBlue"
 $Host.UI.RawUI.ForegroundColor = "White"
 Clear-Host
 
+# Ensure TLS 1.2 is enabled for web requests (Crucial for GitHub and modern APIs on older PS/Windows)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $ErrorActionPreference = "Stop"
 $Script:RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ConfigDefaultsFile = Join-Path $Script:RepoRoot "config.defaults.json"
@@ -542,7 +545,7 @@ function Install-Driver {
 
         foreach ($file in $DriverFiles) {
             $currentFileIndex++
-            $fileName = Split-Path $file.RelativePath -Leaf
+            $fileName = Split-Path $file.RelativePath.Replace('/', '\') -Leaf
             $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
             
             $sizeStr = ""
@@ -630,7 +633,8 @@ function Install-Cuco {
             if ($explorerProc -and $explorerProc.UserName) {
                 $userName = $explorerProc.UserName.Split('\')[-1]
                 # Construct path assuming standard profile location
-                $userDesktop = Join-Path "C:\Users" $userName "Desktop"
+                $userDesktop = Join-Path "C:\Users" $userName
+                $userDesktop = Join-Path $userDesktop "Desktop"
                 if (Test-Path $userDesktop) {
                     $TargetDir = $userDesktop
                     Write-AutoDerivaLog "INFO" "Detected user desktop: $TargetDir" "Gray"
@@ -688,7 +692,7 @@ function Invoke-DownloadAllFile {
     
     foreach ($file in $FileManifest) {
         $currentFileIndex++
-        $fileName = Split-Path $file.RelativePath -Leaf
+        $fileName = Split-Path $file.RelativePath.Replace('/', '\') -Leaf
         $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
         
         $sizeStr = ""
