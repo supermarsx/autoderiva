@@ -45,21 +45,61 @@ $ConfigFile = Join-Path $Script:RepoRoot "config.json"
 # 2. CONFIGURATION & LOGGING
 # ---------------------------------------------------------------------------
 
+# Default Configuration (Fallback)
+$DefaultConfig = @{
+    BaseUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
+    InventoryPath = "exports/driver_inventory.csv"
+    ManifestPath = "exports/driver_file_manifest.csv"
+    LogFile = "AutoDeriva.log"
+}
+
+# Try to load local config first
 if (Test-Path $ConfigFile) {
-    $Config = Get-Content $ConfigFile | ConvertFrom-Json
+    Write-Host "Loading local configuration from $ConfigFile..." -ForegroundColor Cyan
+    try {
+        $LocalConfig = Get-Content $ConfigFile | ConvertFrom-Json
+        # Merge with defaults (simple overlay)
+        $Config = $DefaultConfig.Clone()
+        foreach ($prop in $LocalConfig.PSObject.Properties) {
+            $Config[$prop.Name] = $prop.Value
+        }
+    } catch {
+        Write-Warning "Failed to parse local config. Using defaults."
+        $Config = $DefaultConfig
+    }
 } else {
-    # Fallback defaults if config is missing (useful for standalone execution)
-    $Config = @{
-        BaseUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
-        InventoryPath = "exports/driver_inventory.csv"
-        ManifestPath = "exports/driver_file_manifest.csv"
-        LogFile = "AutoDeriva.log"
+    # Try to fetch remote config
+    $RemoteConfigUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/config.json"
+    Write-Host "Local config not found. Attempting to fetch remote config from $RemoteConfigUrl..." -ForegroundColor Cyan
+    try {
+        $RemoteConfigJson = Invoke-WebRequest -Uri $RemoteConfigUrl -UseBasicParsing -ErrorAction Stop
+        $RemoteConfig = $RemoteConfigJson.Content | ConvertFrom-Json
+        
+        $Config = $DefaultConfig.Clone()
+        foreach ($prop in $RemoteConfig.PSObject.Properties) {
+            $Config[$prop.Name] = $prop.Value
+        }
+        Write-Host "Successfully loaded remote configuration." -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to fetch remote config. Using internal defaults."
+        $Config = $DefaultConfig
     }
 }
 
-$LogFilePath = Join-Path $Script:RepoRoot $Config.LogFile
+# Ensure LogFile path is absolute
+if (-not [System.IO.Path]::IsPathRooted($Config.LogFile)) {
+    $LogFilePath = Join-Path $Script:RepoRoot $Config.LogFile
+} else {
+    $LogFilePath = $Config.LogFile
+}
+
 # Initialize Log
-"AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
+try {
+    "AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
+} catch {
+    Write-Warning "Could not write to log file at $LogFilePath. Logging to console only."
+    $LogFilePath = $null
+}
 
 # TUI Colors
 $ColorHeader = "Cyan"
@@ -85,7 +125,9 @@ function Write-Section {
     param([string]$Title)
     Write-Host "`n   [$Title]" -ForegroundColor $ColorHeader
     Write-Host "   " ("-" * ($Title.Length + 2)) -ForegroundColor $ColorAccent
-    Add-Content -Path $LogFilePath -Value "`n[$Title]"
+    if ($LogFilePath) {
+        Add-Content -Path $LogFilePath -Value "`n[$Title]" -ErrorAction SilentlyContinue
+    }
 }
 
 function Write-AutoDerivaLog {
@@ -100,8 +142,10 @@ function Write-AutoDerivaLog {
     Write-Host "] $Message" -ForegroundColor $ColorText
     
     # File Output
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $LogFilePath -Value "[$timestamp] [$Status] $Message"
+    if ($LogFilePath) {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Add-Content -Path $LogFilePath -Value "[$timestamp] [$Status] $Message" -ErrorAction SilentlyContinue
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -161,6 +205,21 @@ try {
     Write-BrandHeader
     Write-AutoDerivaLog "START" "AutoDeriva Installer Initialized" "Green"
     
+    # 0. Pre-flight Checks
+    Write-Section "Pre-flight Checks"
+    
+    # Check Internet Connection
+    try {
+        $testUrl = "https://github.com"
+        $request = [System.Net.WebRequest]::Create($testUrl)
+        $request.Timeout = 5000
+        $response = $request.GetResponse()
+        $response.Close()
+        Write-AutoDerivaLog "INFO" "Internet connection verified." "Green"
+    } catch {
+        Write-AutoDerivaLog "WARN" "Internet connection check failed. Remote downloads may fail." "Yellow"
+    }
+
     # 1. Create Temp Directory
     $TempDir = Join-Path $env:TEMP "AutoDeriva_$(Get-Random)"
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
@@ -169,7 +228,13 @@ try {
     # 2. Get System Hardware IDs
     Write-Section "Hardware Detection"
     Write-AutoDerivaLog "INFO" "Scanning system devices..." "Cyan"
-    $SystemDevices = Get-PnpDevice -PresentOnly
+    try {
+        $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
+        if (-not $SystemDevices) { throw "Get-PnpDevice returned no results." }
+    } catch {
+        throw "Failed to query system devices: $_"
+    }
+    
     $SystemHardwareIds = $SystemDevices.HardwareID | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
     Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
 
@@ -268,12 +333,11 @@ try {
     Write-Section "Completion"
     Write-AutoDerivaLog "DONE" "AutoDeriva process completed." "Green"
     Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
-    
-    # Pause to let user see output
-    Read-Host "Press Enter to exit..."
 
 } catch {
     Write-AutoDerivaLog "FATAL" "An unexpected error occurred: $_" "Red"
     Write-AutoDerivaLog "FATAL" $($_.ScriptStackTrace) "Red"
-    Read-Host "Press Enter to exit..."
+} finally {
+    Write-Host "`n"
+    Read-Host "Press Enter to close this window..."
 }

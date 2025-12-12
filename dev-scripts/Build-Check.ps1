@@ -29,4 +29,7 @@ try {
     Write-Host "`nBuild Check Passed Successfully!" -ForegroundColor Green
 } catch {
     Write-Error "Build Check Failed: $_"
+} finally {
+    Write-Host "`n"
+    Read-Host "Press Enter to close..."
 }
