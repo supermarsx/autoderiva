@@ -6,6 +6,8 @@
     "LogLevel": "INFO",
     "DownloadAllFiles": false,
     "CucoBinaryPath": "cuco/CtoolGui.exe",
+    "DownloadCuco": true,
+    "CucoTargetDir": "Desktop",
     "MaxRetries": 5,
     "MaxBackoffSeconds": 60,
     "MinDiskSpaceMB": 3072

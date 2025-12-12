@@ -60,6 +60,8 @@ $DefaultConfig = @{
     LogLevel = "INFO"
     DownloadAllFiles = $false
     CucoBinaryPath = "cuco/CtoolGui.exe"
+    DownloadCuco = $true
+    CucoTargetDir = "Desktop"
     MaxRetries = 5
     MaxBackoffSeconds = 60
     MinDiskSpaceMB = 3072
@@ -604,20 +606,62 @@ function Install-Driver {
 
 <#
 .SYNOPSIS
-    Downloads the Cuco binary to the Desktop.
+    Downloads the Cuco binary to the configured directory.
 #>
 function Install-Cuco {
+    if (-not $Config.DownloadCuco) {
+        Write-AutoDerivaLog "INFO" "Cuco download is disabled in configuration." "Gray"
+        return
+    }
+
     Write-Section "Cuco Utility"
-    $DesktopPath = [Environment]::GetFolderPath("Desktop")
-    $CucoDest = Join-Path $DesktopPath "CtoolGui.exe"
+    
+    $TargetDir = $Config.CucoTargetDir
+    
+    # Resolve "Desktop" to the actual user's desktop if possible
+    if ($TargetDir -eq "Desktop") {
+        # Default to current environment's desktop (Admin if elevated)
+        $TargetDir = [Environment]::GetFolderPath("Desktop")
+        
+        # Try to find the original user's desktop if running as Admin
+        # This is a best-effort attempt using the explorer.exe process owner
+        try {
+            $explorerProc = Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($explorerProc -and $explorerProc.UserName) {
+                $userName = $explorerProc.UserName.Split('\')[-1]
+                # Construct path assuming standard profile location
+                $userDesktop = Join-Path "C:\Users" $userName "Desktop"
+                if (Test-Path $userDesktop) {
+                    $TargetDir = $userDesktop
+                    Write-AutoDerivaLog "INFO" "Detected user desktop: $TargetDir" "Gray"
+                }
+            }
+        } catch {
+            Write-Verbose "Could not detect original user desktop. Using: $TargetDir"
+        }
+    } else {
+        # Expand environment variables if present in config path
+        $TargetDir = [Environment]::ExpandEnvironmentVariables($TargetDir)
+    }
+
+    if (-not (Test-Path $TargetDir)) {
+        try {
+            New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+        } catch {
+            Write-AutoDerivaLog "ERROR" "Failed to create target directory: $TargetDir" "Red"
+            return
+        }
+    }
+
+    $CucoDest = Join-Path $TargetDir "CtoolGui.exe"
     $CucoUrl = $Config.BaseUrl + $Config.CucoBinaryPath
 
-    Write-AutoDerivaLog "INFO" "Downloading Cuco utility to Desktop..." "Cyan"
+    Write-AutoDerivaLog "INFO" "Downloading Cuco utility to: $TargetDir" "Cyan"
     
     try {
         Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
         if (Test-Path $CucoDest) {
-            Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded to: $CucoDest" "Green"
+            Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded successfully." "Green"
         } else {
             Write-AutoDerivaLog "ERROR" "Failed to verify Cuco download." "Red"
         }

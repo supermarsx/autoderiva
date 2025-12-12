@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  format:
+    name: Format Check
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run Format Check
+      shell: pwsh
+      run: .\dev-scripts\Format-Check.ps1
+
+  lint:
+    name: Lint Check
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run Lint Check
+      shell: pwsh
+      run: .\dev-scripts\Lint-Check.ps1
+
+  test:
+    name: Test Check
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run Tests
+      shell: pwsh
+      run: .\dev-scripts\Test-Check.ps1

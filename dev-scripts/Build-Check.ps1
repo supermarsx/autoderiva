@@ -18,12 +18,16 @@ $ErrorActionPreference = "Stop"
 Write-Host "Starting Build Check..." -ForegroundColor Cyan
 
 try {
-    # 1. Lint Check
-    Write-Host "`n[Step 1/2] Linting..." -ForegroundColor Yellow
+    # 1. Format Check
+    Write-Host "`n[Step 1/3] Formatting..." -ForegroundColor Yellow
+    & "$PSScriptRoot\Format-Check.ps1"
+
+    # 2. Lint Check
+    Write-Host "`n[Step 2/3] Linting..." -ForegroundColor Yellow
     & "$PSScriptRoot\Lint-Check.ps1"
 
-    # 2. Test Check
-    Write-Host "`n[Step 2/2] Testing..." -ForegroundColor Yellow
+    # 3. Test Check
+    Write-Host "`n[Step 3/3] Testing..." -ForegroundColor Yellow
     & "$PSScriptRoot\Test-Check.ps1"
 
     Write-Host "`nBuild Check Passed Successfully!" -ForegroundColor Green
