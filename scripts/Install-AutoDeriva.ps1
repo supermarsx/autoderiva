@@ -274,27 +274,72 @@ $Script:CsvCache = @{}
 
 <#
 .SYNOPSIS
-    Downloads a file from a URL to a local path.
+    Downloads a file from a URL to a local path with retry logic.
 .PARAMETER Url
     The URL of the file to download.
 .PARAMETER OutputPath
     The local path where the file should be saved.
+.PARAMETER MaxRetries
+    Number of times to retry the download.
 .OUTPUTS
     Boolean. True if successful, False otherwise.
 #>
 function Invoke-DownloadFile {
-    param($Url, $OutputPath)
+    param($Url, $OutputPath, $MaxRetries = 3)
     try {
         $dir = Split-Path $OutputPath -Parent
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
         
-        # Use Invoke-WebRequest with basic retry logic could be added here
-        Invoke-WebRequest -Uri $Url -OutFile $OutputPath -UseBasicParsing
+        $retryCount = 0
+        $success = $false
+        
+        while (-not $success -and $retryCount -lt $MaxRetries) {
+            try {
+                Invoke-WebRequest -Uri $Url -OutFile $OutputPath -UseBasicParsing -ErrorAction Stop
+                $success = $true
+            } catch {
+                $retryCount++
+                Write-AutoDerivaLog "WARN" "Download failed (Attempt $retryCount/$MaxRetries): $Url" "Yellow"
+                if ($retryCount -lt $MaxRetries) { Start-Sleep -Seconds 2 }
+            }
+        }
+        
+        if (-not $success) {
+            throw "Failed to download after $MaxRetries attempts."
+        }
+        
         return $true
     }
     catch {
         Write-AutoDerivaLog "ERROR" "Failed to download: $Url. Error: $_" "Red"
         return $false
+    }
+}
+
+<#
+.SYNOPSIS
+    Checks if there is enough free disk space on the drive.
+.PARAMETER Path
+    The path to check.
+.PARAMETER MinMB
+    Minimum required space in Megabytes.
+.OUTPUTS
+    Boolean.
+#>
+function Test-DiskSpace {
+    param($Path, $MinMB = 500)
+    try {
+        $drive = Get-PSDrive -Name (Split-Path $Path -Qualifier).TrimEnd(':') -ErrorAction Stop
+        $freeMB = [math]::Round($drive.Free / 1MB, 2)
+        if ($freeMB -lt $MinMB) {
+            Write-AutoDerivaLog "ERROR" "Insufficient disk space on $($drive.Name). Free: ${freeMB}MB, Required: ${MinMB}MB" "Red"
+            return $false
+        }
+        Write-AutoDerivaLog "INFO" "Disk space check passed. Free: ${freeMB}MB" "Green"
+        return $true
+    } catch {
+        Write-AutoDerivaLog "WARN" "Could not verify disk space: $_" "Yellow"
+        return $true # Assume true on error to avoid blocking
     }
 }
 
@@ -414,13 +459,17 @@ function Find-CompatibleDriver {
     The list of compatible drivers.
 .PARAMETER TempDir
     The temporary directory to use for downloads.
+.OUTPUTS
+    PSCustomObject[]. List of installation results.
 #>
 function Install-Driver {
     param($DriverMatches, $TempDir)
     
+    $Results = @()
+
     if ($DriverMatches.Count -eq 0) {
         Write-AutoDerivaLog "INFO" "No compatible drivers found in the inventory." "Yellow"
-        return
+        return $Results
     }
 
     Write-AutoDerivaLog "SUCCESS" "Found $( $DriverMatches.Count ) compatible drivers." "Green"
@@ -450,11 +499,13 @@ function Install-Driver {
         
         if (-not $DriverFiles) {
             Write-AutoDerivaLog "WARN" "No files found in manifest for $infPath" "Yellow"
+            $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Skipped (No Files)"; Details = "Manifest missing files" }
             continue
         }
         
         $totalFiles = $DriverFiles.Count
         $currentFileIndex = 0
+        $downloadFailed = $false
 
         foreach ($file in $DriverFiles) {
             $currentFileIndex++
@@ -467,11 +518,23 @@ function Install-Driver {
             # Reconstruct path in TempDir
             $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
             
-            Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
-            $Script:Stats.FilesDownloaded++
+            $dlResult = Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
+            if ($dlResult) {
+                $Script:Stats.FilesDownloaded++
+            } else {
+                $downloadFailed = $true
+                break
+            }
         }
         Write-Progress -Id 2 -Completed
         
+        if ($downloadFailed) {
+            Write-AutoDerivaLog "ERROR" "Aborting installation for $infPath due to download failure." "Red"
+            $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "Download Error" }
+            $Script:Stats.DriversFailed++
+            continue
+        }
+
         # Install Driver
         # The INF file is at $TempDir + $infPath
         $LocalInfPath = Join-Path $TempDir $infPath.Replace('/', '\')
@@ -483,16 +546,24 @@ function Install-Driver {
             if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) { # 3010 = Reboot required
                 Write-AutoDerivaLog "SUCCESS" "Driver installed successfully." "Green"
                 $Script:Stats.DriversInstalled++
-                if ($proc.ExitCode -eq 3010) { $Script:Stats.RebootsRequired++ }
+                $status = "Installed"
+                if ($proc.ExitCode -eq 3010) { 
+                    $Script:Stats.RebootsRequired++ 
+                    $status = "Installed (Reboot Req)"
+                }
+                $Results += [PSCustomObject]@{ Driver = $infPath; Status = $status; Details = "Success" }
             } else {
                 Write-AutoDerivaLog "ERROR" "Driver installation failed. Exit Code: $($proc.ExitCode)" "Red"
                 $Script:Stats.DriversFailed++
+                $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "PnPUtil Exit Code $($proc.ExitCode)" }
             }
         } else {
             Write-AutoDerivaLog "ERROR" "INF file not found after download: $LocalInfPath" "Red"
+            $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "INF Missing" }
         }
     }
     Write-Progress -Id 1 -Completed
+    return $Results
 }
 
 <#
@@ -571,6 +642,12 @@ function Main {
         New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
         Write-AutoDerivaLog "INFO" "Temporary workspace: $TempDir" "Gray"
 
+        # Check Disk Space (Assume 1GB needed for safety)
+        if (-not (Test-DiskSpace -Path $TempDir -MinMB 1024)) {
+            Write-AutoDerivaLog "FATAL" "Not enough disk space to proceed." "Red"
+            return
+        }
+
         # Download All Files if configured
         if ($Config.DownloadAllFiles) {
             Invoke-DownloadAllFile -TempDir $TempDir
@@ -589,7 +666,7 @@ function Main {
         $DriverMatches = Find-CompatibleDriver -DriverInventory $DriverInventory -SystemHardwareIds $SystemHardwareIds
 
         # Install Drivers
-        Install-Driver -DriverMatches $DriverMatches -TempDir $TempDir
+        $InstallResults = Install-Driver -DriverMatches $DriverMatches -TempDir $TempDir
 
         # Cleanup
         Write-Section "Cleanup"
@@ -610,6 +687,14 @@ function Main {
         Write-AutoDerivaLog "INFO" "Drivers Failed       : $($Script:Stats.DriversFailed)" "Red"
         if ($Script:Stats.RebootsRequired -gt 0) {
             Write-AutoDerivaLog "WARN" "Reboots Required     : $($Script:Stats.RebootsRequired)" "Yellow"
+        }
+
+        if ($InstallResults.Count -gt 0) {
+            Write-Section "Detailed Summary"
+            $InstallResults | Format-Table -AutoSize | Out-String | Write-Host -ForegroundColor White
+            if ($LogFilePath) {
+                $InstallResults | Format-Table -AutoSize | Out-String | Add-Content -Path $LogFilePath
+            }
         }
 
         if ($LogFilePath) {
