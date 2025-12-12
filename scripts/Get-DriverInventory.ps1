@@ -1,3 +1,23 @@
+<#
+.SYNOPSIS
+    Generates a detailed inventory of all drivers in the repository.
+
+.DESCRIPTION
+    This script scans all .inf files in the 'drivers' directory.
+    It parses each .inf file to extract:
+    - Class
+    - Provider
+    - Driver Version
+    - Driver Date
+    - Hardware IDs
+    
+    The results are exported to 'exports/driver_inventory.csv'.
+    This inventory is used by the installer script to match drivers to hardware.
+
+.EXAMPLE
+    .\scripts\Get-DriverInventory.ps1
+#>
+
 $ErrorActionPreference = "Stop"
 
 # Get-DriverInventory.ps1

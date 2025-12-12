@@ -1,3 +1,17 @@
+<#
+.SYNOPSIS
+    Retrieves the Hardware IDs of all present Plug and Play devices on the current system.
+
+.DESCRIPTION
+    This script uses `Get-PnpDevice` to list all devices currently present on the system.
+    It extracts the Class, FriendlyName, InstanceId, and HardwareIDs for each device.
+    The result is exported to 'exports/system_hardware_ids.csv'.
+    This is useful for capturing the hardware fingerprint of a reference machine.
+
+.EXAMPLE
+    .\scripts\Get-SystemHardwareIDs.ps1
+#>
+
 $ErrorActionPreference = "Stop"
 
 # Determine paths

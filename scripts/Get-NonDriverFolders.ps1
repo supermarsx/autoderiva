@@ -1,3 +1,16 @@
+<#
+.SYNOPSIS
+    Scans the 'drivers' directory for folders that do NOT contain driver files (.inf).
+
+.DESCRIPTION
+    This script recursively searches the 'drivers' directory for folders that contain files but NO .inf files.
+    It outputs a list of relative paths to these folders to 'exports/non_driver_folders.txt'.
+    This helps identify folders that might contain documentation, utilities, or other non-driver assets.
+
+.EXAMPLE
+    .\scripts\Get-NonDriverFolders.ps1
+#>
+
 $ErrorActionPreference = "Stop"
 
 # Determine the repository root (assuming script is in /scripts)

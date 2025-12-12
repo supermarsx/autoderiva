@@ -1,3 +1,16 @@
+<#
+.SYNOPSIS
+    Scans the 'drivers' directory for folders containing driver files (.inf).
+
+.DESCRIPTION
+    This script recursively searches the 'drivers' directory for any folder that contains at least one .inf file.
+    It outputs a list of relative paths to these folders to 'exports/driver_folders.txt'.
+    This is useful for understanding which directories actually contain driver packages.
+
+.EXAMPLE
+    .\scripts\Get-DriverFolders.ps1
+#>
+
 $ErrorActionPreference = "Stop"
 
 # Determine the repository root (assuming script is in /scripts)
