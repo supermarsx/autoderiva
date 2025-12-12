@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Counts languages in the repository but ignores `drivers` and `cuco` by default.
 
@@ -7,21 +7,18 @@ This script attempts to use `cloc` if available (recommended) and will pass an e
 
 .EXAMPLE
 # Run with defaults (ignores drivers and cuco)
-.
-\scripts\Count-Languages.ps1
+.\scripts\Count-Languages.ps1
 
 # Run with cloc and additional excludes
-.
-\scripts\Count-Languages.ps1 -ExtraExcludes @('tools','third_party')
+.\scripts\Count-Languages.ps1 -ExtraExcludes @('tools','third_party')
 # Or point to a custom exclude list file
-.
-\scripts\Count-Languages.ps1 -ExcludeListFile .\scripts\my_excludes.txt
+.\scripts\Count-Languages.ps1 -ExcludeListFile .\scripts\my_excludes.txt
 #>
 
 param(
     [string[]] $ExtraExcludes = @(),
     [string] $ExcludeListFile = "",
-    [switch] $UseCloc = $true,
+    [bool] $UseCloc = $true,
     [string] $OutputFile = "exports\language_summary.csv"
 )
 
@@ -61,11 +58,11 @@ if ($UseCloc -and (Get-Command cloc -ErrorAction SilentlyContinue)) {
     $outPath = Join-Path $repoRoot "cloc_output.csv"
 
     # Run cloc with CSV output
-    $args = @("--exclude-list-file=$tempExcludeFile", "--csv", "--out=$outPath", ".")
-    Write-Host "Running: cloc $($args -join ' ')"
+    $clocArgs = @("--exclude-list-file=$tempExcludeFile", "--csv", "--out=$outPath", ".")
+    Write-Host "Running: cloc $($clocArgs -join ' ')"
 
-    & cloc @args
-n
+    & cloc @clocArgs
+
     if (Test-Path $outPath) {
         Write-Host "cloc output saved to: $outPath" -ForegroundColor Green
         # Optionally copy to OutputFile name requested
@@ -142,7 +139,9 @@ foreach ($f in $allFiles) {
         if ($f.Length -lt 20MB) {
             $lines = (Get-Content -Path $f.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines
         }
-    } catch { }
+    } catch {
+        Write-Warning "Could not read file $($f.FullName): $_"
+    }
 
     if (-not $summary.ContainsKey($lang)) {
         $summary[$lang] = [ordered]@{ Files = 0; Lines = 0; Bytes = 0 }
@@ -169,3 +168,5 @@ Write-Host "Counted $(($rows | Measure-Object).Count) languages. Output: $Output
 
 # Also print a short table
 $rows | Format-Table -AutoSize
+
+

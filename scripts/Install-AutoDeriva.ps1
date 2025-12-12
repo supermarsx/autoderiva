@@ -13,7 +13,7 @@
        - Downloads all required files for the matched drivers to a temporary directory.
        - Reconstructs the folder structure.
        - Installs drivers using PnPUtil.
-    6. Cleans up temporary files.s
+    6. Cleans up temporary files.
     
     Features:
     - Auto-elevation (Runs as Administrator)
@@ -32,7 +32,7 @@
 # ---------------------------------------------------------------------------
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Requesting administrative privileges..." -ForegroundColor Yellow
-    $newProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`"" -Verb RunAs -PassThru
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`"" -Verb RunAs -PassThru | Out-Null
     exit
 }
 
@@ -64,17 +64,14 @@ $LogFilePath = Join-Path $Script:RepoRoot $Config.LogFile
 $ColorHeader = "Cyan"
 $ColorText = "White"
 $ColorAccent = "Blue"
-$ColorSuccess = "Green"
-$ColorWarning = "Yellow"
-$ColorError = "Red"
 $ColorDim = "Gray"
 
 function Write-BrandHeader {
     Clear-Host
     Write-Host "`n"
     Write-Host "           |           " -ForegroundColor $ColorText
-    Write-Host "       ____|____       " -ForegroundColor $ColorWarning
-    Write-Host "      /_________\      " -ForegroundColor $ColorWarning
+    Write-Host "       ____|____       " -ForegroundColor Yellow
+    Write-Host "      /_________\      " -ForegroundColor Yellow
     Write-Host "   ~~~~~~~~~~~~~~~~~   " -ForegroundColor $ColorAccent
     Write-Host "   AUTO" -NoNewline -ForegroundColor $ColorAccent
     Write-Host "DERIVA" -ForegroundColor $ColorHeader
@@ -90,7 +87,7 @@ function Write-Section {
     Add-Content -Path $LogFilePath -Value "`n[$Title]"
 }
 
-function Write-Log {
+function Write-AutoDerivaLog {
     param(
         [string]$Status,
         [string]$Message,
@@ -121,7 +118,7 @@ function Invoke-DownloadFile {
         return $true
     }
     catch {
-        Write-Log "ERROR" "Failed to download: $Url. Error: $_" "Red"
+        Write-AutoDerivaLog "ERROR" "Failed to download: $Url. Error: $_" "Red"
         return $false
     }
 }
@@ -129,7 +126,7 @@ function Invoke-DownloadFile {
 function Get-RemoteCsv {
     param($Url)
     try {
-        Write-Log "INFO" "Fetching data from: $Url" "Cyan"
+        Write-AutoDerivaLog "INFO" "Fetching data from: $Url" "Cyan"
         $response = Invoke-WebRequest -Uri $Url -UseBasicParsing
         # Convert CSV content to objects
         $content = $response.Content
@@ -137,7 +134,7 @@ function Get-RemoteCsv {
         return $content | ConvertFrom-Csv
     }
     catch {
-        Write-Log "ERROR" "Failed to fetch CSV from $Url" "Red"
+        Write-AutoDerivaLog "ERROR" "Failed to fetch CSV from $Url" "Red"
         throw $_
     }
 }
@@ -148,29 +145,29 @@ function Get-RemoteCsv {
 
 try {
     Write-BrandHeader
-    Write-Log "START" "AutoDeriva Installer Initialized" "Green"
+    Write-AutoDerivaLog "START" "AutoDeriva Installer Initialized" "Green"
     
     # 1. Create Temp Directory
     $TempDir = Join-Path $env:TEMP "AutoDeriva_$(Get-Random)"
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
-    Write-Log "INFO" "Temporary workspace: $TempDir" "Gray"
+    Write-AutoDerivaLog "INFO" "Temporary workspace: $TempDir" "Gray"
 
     # 2. Get System Hardware IDs
     Write-Section "Hardware Detection"
-    Write-Log "INFO" "Scanning system devices..." "Cyan"
+    Write-AutoDerivaLog "INFO" "Scanning system devices..." "Cyan"
     $SystemDevices = Get-PnpDevice -PresentOnly
     $SystemHardwareIds = $SystemDevices.HardwareID | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
-    Write-Log "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
+    Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
 
     # 3. Fetch Driver Inventory
     Write-Section "Driver Inventory"
     $InventoryUrl = $Config.BaseUrl + $Config.InventoryPath
     $DriverInventory = Get-RemoteCsv -Url $InventoryUrl
-    Write-Log "INFO" "Loaded $( $DriverInventory.Count ) drivers from remote inventory." "Green"
+    Write-AutoDerivaLog "INFO" "Loaded $( $DriverInventory.Count ) drivers from remote inventory." "Green"
 
     # 4. Match Drivers
     Write-Section "Driver Matching"
-    $Matches = @()
+    $DriverMatches = @()
     
     foreach ($driver in $DriverInventory) {
         # Parse HWIDs from CSV (semicolon separated)
@@ -184,15 +181,15 @@ try {
             # For simplicity, we'll collect all matches and let PnPUtil decide or filter duplicates.
             # A better approach is to group by Class/Provider and pick the newest Date/Version.
             
-            $Matches += $driver
+            $DriverMatches += $driver
         }
     }
 
-    if ($Matches.Count -eq 0) {
-        Write-Log "INFO" "No compatible drivers found in the inventory." "Yellow"
+    if ($DriverMatches.Count -eq 0) {
+        Write-AutoDerivaLog "INFO" "No compatible drivers found in the inventory." "Yellow"
     }
     else {
-        Write-Log "SUCCESS" "Found $( $Matches.Count ) compatible drivers." "Green"
+        Write-AutoDerivaLog "SUCCESS" "Found $( $DriverMatches.Count ) compatible drivers." "Green"
         
         # 5. Fetch File Manifest
         Write-Section "File Manifest & Download"
@@ -200,13 +197,12 @@ try {
         $FileManifest = Get-RemoteCsv -Url $ManifestUrl
         
         # Group matches by INF path to avoid duplicate downloads
-        $UniqueInfs = $Matches | Select-Object -ExpandProperty InfPath -Unique
+        $UniqueInfs = $DriverMatches | Select-Object -ExpandProperty InfPath -Unique
         
-        $TotalFiles = 0
         $DownloadedFiles = 0
         
         foreach ($infPath in $UniqueInfs) {
-            Write-Log "PROCESS" "Processing driver: $infPath" "Cyan"
+            Write-AutoDerivaLog "PROCESS" "Processing driver: $infPath" "Cyan"
             
             # Find all files associated with this INF in the manifest
             # Note: AssociatedInf in manifest uses forward slashes, ensure matching format
@@ -214,7 +210,7 @@ try {
             $DriverFiles = $FileManifest | Where-Object { $_.AssociatedInf -eq $TargetInf }
             
             if (-not $DriverFiles) {
-                Write-Log "WARN" "No files found in manifest for $infPath" "Yellow"
+                Write-AutoDerivaLog "WARN" "No files found in manifest for $infPath" "Yellow"
                 continue
             }
             
@@ -223,7 +219,7 @@ try {
                 # Reconstruct path in TempDir
                 $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
                 
-                # Write-Log "DOWN" "Downloading $($file.RelativePath)..." "Gray"
+                # Write-AutoDerivaLog "DOWN" "Downloading $($file.RelativePath)..." "Gray"
                 $success = Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
                 if ($success) { $DownloadedFiles++ }
             }
@@ -233,17 +229,16 @@ try {
             $LocalInfPath = Join-Path $TempDir $infPath.Replace('/', '\')
             
             if (Test-Path $LocalInfPath) {
-                Write-Log "INSTALL" "Installing driver..." "Cyan"
-                $installCmd = "pnputil.exe /add-driver `"$LocalInfPath`" /install"
+                Write-AutoDerivaLog "INSTALL" "Installing driver..." "Cyan"
                 $proc = Start-Process -FilePath "pnputil.exe" -ArgumentList "/add-driver `"$LocalInfPath`" /install" -NoNewWindow -Wait -PassThru
                 
                 if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) { # 3010 = Reboot required
-                    Write-Log "SUCCESS" "Driver installed successfully." "Green"
+                    Write-AutoDerivaLog "SUCCESS" "Driver installed successfully." "Green"
                 } else {
-                    Write-Log "ERROR" "Driver installation failed. Exit Code: $($proc.ExitCode)" "Red"
+                    Write-AutoDerivaLog "ERROR" "Driver installation failed. Exit Code: $($proc.ExitCode)" "Red"
                 }
             } else {
-                Write-Log "ERROR" "INF file not found after download: $LocalInfPath" "Red"
+                Write-AutoDerivaLog "ERROR" "INF file not found after download: $LocalInfPath" "Red"
             }
         }
     }
@@ -252,18 +247,18 @@ try {
     Write-Section "Cleanup"
     if (Test-Path $TempDir) {
         Remove-Item -Path $TempDir -Recurse -Force
-        Write-Log "INFO" "Temporary files removed." "Green"
+        Write-AutoDerivaLog "INFO" "Temporary files removed." "Green"
     }
 
     Write-Section "Completion"
-    Write-Log "DONE" "AutoDeriva process completed." "Green"
-    Write-Log "INFO" "Log saved to: $LogFilePath" "Gray"
+    Write-AutoDerivaLog "DONE" "AutoDeriva process completed." "Green"
+    Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
     
     # Pause to let user see output
     Read-Host "Press Enter to exit..."
 
 } catch {
-    Write-Log "FATAL" "An unexpected error occurred: $_" "Red"
-    Write-Log "FATAL" $($_.ScriptStackTrace) "Red"
+    Write-AutoDerivaLog "FATAL" "An unexpected error occurred: $_" "Red"
+    Write-AutoDerivaLog "FATAL" $($_.ScriptStackTrace) "Red"
     Read-Host "Press Enter to exit..."
 }
