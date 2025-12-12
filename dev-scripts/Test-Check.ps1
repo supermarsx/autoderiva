@@ -11,6 +11,10 @@
 #>
 
 $ErrorActionPreference = "Stop"
+
+# Ensure Pester is imported to access [PesterConfiguration]
+Import-Module Pester -ErrorAction Stop
+
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $testsPath = Join-Path $repoRoot "tests"
 
