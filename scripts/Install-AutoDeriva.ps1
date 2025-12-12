@@ -60,6 +60,9 @@ $DefaultConfig = @{
     LogLevel = "INFO"
     DownloadAllFiles = $false
     CucoBinaryPath = "cuco/CtoolGui.exe"
+    MaxRetries = 5
+    MaxBackoffSeconds = 60
+    MinDiskSpaceMB = 3072
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -274,18 +277,39 @@ $Script:CsvCache = @{}
 
 <#
 .SYNOPSIS
-    Downloads a file from a URL to a local path with retry logic.
+    Formats a file size in bytes to a human-readable string.
+.PARAMETER Bytes
+    The size in bytes.
+.OUTPUTS
+    String.
+#>
+function Format-FileSize {
+    param([long]$Bytes)
+    $Units = @('B', 'KB', 'MB', 'GB', 'TB')
+    $Index = 0
+    while ($Bytes -ge 1KB -and $Index -lt $Units.Count - 1) {
+        $Bytes /= 1KB
+        $Index++
+    }
+    return "{0:N2} {1}" -f $Bytes, $Units[$Index]
+}
+
+<#
+.SYNOPSIS
+    Downloads a file from a URL to a local path with retry logic and exponential backoff.
 .PARAMETER Url
     The URL of the file to download.
 .PARAMETER OutputPath
     The local path where the file should be saved.
 .PARAMETER MaxRetries
     Number of times to retry the download.
+.PARAMETER MaxBackoff
+    Maximum backoff time in seconds.
 .OUTPUTS
     Boolean. True if successful, False otherwise.
 #>
 function Invoke-DownloadFile {
-    param($Url, $OutputPath, $MaxRetries = 3)
+    param($Url, $OutputPath, $MaxRetries = 5, $MaxBackoff = 60)
     try {
         $dir = Split-Path $OutputPath -Parent
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
@@ -299,8 +323,13 @@ function Invoke-DownloadFile {
                 $success = $true
             } catch {
                 $retryCount++
+                # Exponential Backoff: 2^($retryCount) seconds, capped at MaxBackoff
+                $backoff = [math]::Min($MaxBackoff, [math]::Pow(2, $retryCount))
+                
                 Write-AutoDerivaLog "WARN" "Download failed (Attempt $retryCount/$MaxRetries): $Url" "Yellow"
-                if ($retryCount -lt $MaxRetries) { Start-Sleep -Seconds 2 }
+                Write-AutoDerivaLog "WARN" "Retrying in $backoff seconds..." "Yellow"
+                
+                if ($retryCount -lt $MaxRetries) { Start-Sleep -Seconds $backoff }
             }
         }
         
@@ -327,15 +356,19 @@ function Invoke-DownloadFile {
     Boolean.
 #>
 function Test-DiskSpace {
-    param($Path, $MinMB = 500)
+    param($Path, $MinMB = 3072)
     try {
         $drive = Get-PSDrive -Name (Split-Path $Path -Qualifier).TrimEnd(':') -ErrorAction Stop
         $freeMB = [math]::Round($drive.Free / 1MB, 2)
+        
+        $freeReadable = Format-FileSize ($drive.Free)
+        $minReadable = Format-FileSize ($MinMB * 1MB)
+
         if ($freeMB -lt $MinMB) {
-            Write-AutoDerivaLog "ERROR" "Insufficient disk space on $($drive.Name). Free: ${freeMB}MB, Required: ${MinMB}MB" "Red"
+            Write-AutoDerivaLog "ERROR" "Insufficient disk space on $($drive.Name). Free: $freeReadable, Required: $minReadable" "Red"
             return $false
         }
-        Write-AutoDerivaLog "INFO" "Disk space check passed. Free: ${freeMB}MB" "Green"
+        Write-AutoDerivaLog "INFO" "Disk space check passed. Free: $freeReadable" "Green"
         return $true
     } catch {
         Write-AutoDerivaLog "WARN" "Could not verify disk space: $_" "Yellow"
@@ -512,13 +545,16 @@ function Install-Driver {
             $fileName = Split-Path $file.RelativePath -Leaf
             $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
             
-            Write-Progress -Id 2 -ParentId 1 -Activity "Downloading Files" -Status "$fileName" -PercentComplete $percentComplete
+            $fileSize = if ($file.Size) { Format-FileSize $file.Size } else { "" }
+            $statusMsg = if ($fileSize) { "$fileName ($fileSize)" } else { "$fileName" }
+            
+            Write-Progress -Id 2 -ParentId 1 -Activity "Downloading Files" -Status $statusMsg -PercentComplete $percentComplete
 
             $remoteUrl = $Config.BaseUrl + $file.RelativePath
             # Reconstruct path in TempDir
             $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
             
-            $dlResult = Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
+            $dlResult = Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath -MaxRetries $Config.MaxRetries -MaxBackoff $Config.MaxBackoffSeconds
             if ($dlResult) {
                 $Script:Stats.FilesDownloaded++
             } else {
@@ -579,7 +615,7 @@ function Install-Cuco {
     Write-AutoDerivaLog "INFO" "Downloading Cuco utility to Desktop..." "Cyan"
     
     try {
-        Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
+        Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest -MaxRetries $Config.MaxRetries -MaxBackoff $Config.MaxBackoffSeconds
         if (Test-Path $CucoDest) {
             Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded to: $CucoDest" "Green"
         } else {
@@ -611,12 +647,15 @@ function Invoke-DownloadAllFile {
         $fileName = Split-Path $file.RelativePath -Leaf
         $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
         
-        Write-Progress -Activity "Downloading All Files" -Status "Downloading $fileName ($currentFileIndex/$totalFiles)" -PercentComplete $percentComplete
+        $fileSize = if ($file.Size) { Format-FileSize $file.Size } else { "" }
+        $statusMsg = if ($fileSize) { "Downloading $fileName ($fileSize) ($currentFileIndex/$totalFiles)" } else { "Downloading $fileName ($currentFileIndex/$totalFiles)" }
+
+        Write-Progress -Activity "Downloading All Files" -Status $statusMsg -PercentComplete $percentComplete
         
         $remoteUrl = $Config.BaseUrl + $file.RelativePath
         $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
         
-        Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
+        Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath -MaxRetries $Config.MaxRetries -MaxBackoff $Config.MaxBackoffSeconds
         $Script:Stats.FilesDownloaded++
     }
     Write-Progress -Activity "Downloading All Files" -Completed
@@ -642,8 +681,8 @@ function Main {
         New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
         Write-AutoDerivaLog "INFO" "Temporary workspace: $TempDir" "Gray"
 
-        # Check Disk Space (Assume 1GB needed for safety)
-        if (-not (Test-DiskSpace -Path $TempDir -MinMB 1024)) {
+        # Check Disk Space
+        if (-not (Test-DiskSpace -Path $TempDir -MinMB $Config.MinDiskSpaceMB)) {
             Write-AutoDerivaLog "FATAL" "Not enough disk space to proceed." "Red"
             return
         }

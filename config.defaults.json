@@ -5,5 +5,8 @@
     "EnableLogging": true,
     "LogLevel": "INFO",
     "DownloadAllFiles": false,
-    "CucoBinaryPath": "cuco/CtoolGui.exe"
+    "CucoBinaryPath": "cuco/CtoolGui.exe",
+    "MaxRetries": 5,
+    "MaxBackoffSeconds": 60,
+    "MinDiskSpaceMB": 3072
 }
