@@ -14,6 +14,11 @@
     - TUI with color-coded output
     - Smart driver matching based on Hardware IDs
     - Version/Date comparison to ensure latest drivers are used
+
+    Supported School Models:
+    - Insys GW1-W149 (14" i3-10110U)
+    - HP 240 G8 Notebook PC
+    - JP-IK Leap T304 (SF20PA6W)
     
 .EXAMPLE
     Run from PowerShell:
@@ -36,39 +41,49 @@ $ErrorActionPreference = "Stop"
 $Script:RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 
 # ---------------------------------------------------------------------------
-# 2. TUI HELPER FUNCTIONS
+# 2. TUI HELPER FUNCTIONS (Blue Theme)
 # ---------------------------------------------------------------------------
-function Write-Header {
+$ColorHeader  = "Cyan"
+$ColorText    = "White"
+$ColorAccent  = "Blue"
+$ColorSuccess = "Green"
+$ColorWarning = "Yellow"
+$ColorError   = "Red"
+$ColorDim     = "Gray"
+
+function Write-BrandHeader {
+    Clear-Host
+    Write-Host "`n"
+    
+    # Life Raft ASCII Art
+    Write-Host "           |           " -ForegroundColor $ColorText
+    Write-Host "       ____|____       " -ForegroundColor $ColorWarning
+    Write-Host "      /_________\      " -ForegroundColor $ColorWarning
+    Write-Host "   ~~~~~~~~~~~~~~~~~   " -ForegroundColor $ColorAccent
+    
+    Write-Host "   AUTO" -NoNewline -ForegroundColor $ColorAccent
+    Write-Host "DERIVA" -ForegroundColor $ColorHeader
+    Write-Host "   System Setup & Driver Installer" -ForegroundColor $ColorDim
+    Write-Host "   " ("-"*60) -ForegroundColor $ColorAccent
+    Write-Host "`n"
+}
+
+function Write-Section {
     param([string]$Title)
-    Write-Host ""
-    Write-Host ("=" * 60) -ForegroundColor Cyan
-    Write-Host "  $Title" -ForegroundColor White
-    Write-Host ("=" * 60) -ForegroundColor Cyan
+    Write-Host "`n   [$Title]" -ForegroundColor $ColorHeader
+    Write-Host "   " ("-"*($Title.Length+2)) -ForegroundColor $ColorAccent
 }
 
-function Write-Info {
-    param([string]$Message)
-    Write-Host "[INFO]    $Message" -ForegroundColor Gray
-}
-
-function Write-Success {
-    param([string]$Message)
-    Write-Host "[SUCCESS] $Message" -ForegroundColor Green
-}
-
-function Write-WarningLog {
-    param([string]$Message)
-    Write-Host "[WARN]    $Message" -ForegroundColor Yellow
-}
-
-function Write-ErrorLog {
-    param([string]$Message)
-    Write-Host "[ERROR]   $Message" -ForegroundColor Red
-}
-
-function Write-Step {
-    param([string]$Message)
-    Write-Host "`n-> $Message" -ForegroundColor Cyan
+function Write-Log {
+    param(
+        [string]$Status,
+        [string]$Message,
+        [string]$Color = "White"
+    )
+    # Format: [STATUS] Message
+    Write-Host "   [" -NoNewline -ForegroundColor $ColorDim
+    Write-Host "$Status" -NoNewline -ForegroundColor $Color
+    Write-Host "] $Message" -ForegroundColor $ColorText
 }
 
 # ---------------------------------------------------------------------------
@@ -76,45 +91,40 @@ function Write-Step {
 # ---------------------------------------------------------------------------
 
 function Copy-CucoToDesktop {
-    Write-Header "Task 1: Copy Cuco Utility"
+    Write-Section "Task 1: Copy Cuco Utility"
     
     $sourcePath = Join-Path $Script:RepoRoot "cuco\CtoolGui.exe"
     $desktopPath = [Environment]::GetFolderPath("Desktop")
     $destPath = Join-Path $desktopPath "CtoolGui.exe"
 
     if (-not (Test-Path $sourcePath)) {
-        Write-ErrorLog "Source file not found: $sourcePath"
+        Write-Log "ERROR" "Source file not found: $sourcePath" "Red"
         return
     }
-
-    Write-Info "Source: $sourcePath"
-    Write-Info "Dest:   $destPath"
 
     try {
         Copy-Item -Path $sourcePath -Destination $destPath -Force
         if (Test-Path $destPath) {
-            Write-Success "CtoolGui.exe copied to Desktop successfully."
+            Write-Log "DONE" "CtoolGui.exe copied to Desktop." "Green"
+        } else {
+            Write-Log "FAIL" "Failed to verify file at destination." "Red"
         }
-        else {
-            Write-ErrorLog "Failed to verify file at destination."
-        }
-    }
-    catch {
-        Write-ErrorLog "Copy failed: $_"
+    } catch {
+        Write-Log "FAIL" "Copy failed: $_" "Red"
     }
 }
 
 function Install-Drivers {
-    Write-Header "Task 2: Smart Driver Installation"
+    Write-Section "Task 2: Smart Driver Installation"
 
     $driversPath = Join-Path $Script:RepoRoot "drivers"
     if (-not (Test-Path $driversPath)) {
-        Write-ErrorLog "Drivers folder not found at: $driversPath"
+        Write-Log "ERROR" "Drivers folder not found at: $driversPath" "Red"
         return
     }
 
     # A. Get System Hardware IDs
-    Write-Step "Scanning System Hardware..."
+    Write-Log "INFO" "Scanning System Hardware..." "Cyan"
     $pnpDevices = Get-PnpDevice -PresentOnly
     $systemHwIds = New-Object System.Collections.Generic.HashSet[string]
     
@@ -125,26 +135,30 @@ function Install-Drivers {
             }
         }
     }
-    Write-Info "Found $( $systemHwIds.Count ) unique Hardware IDs on this system."
+    Write-Log "INFO" "Found $( $systemHwIds.Count ) unique Hardware IDs." "Gray"
 
     # B. Scan Library for Compatible Drivers
-    Write-Step "Scanning Driver Library (this may take a moment)..."
-    $infFiles = Get-ChildItem -Path $driversPath -Recurse -Filter "*.inf"
+    Write-Log "INFO" "Scanning Driver Library..." "Cyan"
     
-    $compatibleDrivers = @() # List of objects { Path, Date, Version, MatchedID }
-
-    # Regex for parsing
+    $infFiles = Get-ChildItem -Path $driversPath -Recurse -Filter "*.inf"
+    $totalFiles = $infFiles.Count
+    $compatibleDrivers = @() 
     $hwidRegex = [Regex]"(PCI|USB|ACPI|HID|HDAUDIO|BTH|DISPLAY|INTELAUDIO)\\[A-Za-z0-9&_]+"
     
+    $i = 0
     foreach ($inf in $infFiles) {
+        $i++
+        $percent = [math]::Min(100, [int](($i / $totalFiles) * 100))
+        Write-Progress -Activity "Scanning Driver Library" -Status "Processing $($inf.Name)" -PercentComplete $percent
+
         try {
-            # Read file content (first 500 lines usually enough for IDs, but read all to be safe)
-            # Optimization: Read as string array to avoid massive memory alloc for huge files
+            # Read file content (first 2000 chars usually enough for IDs to appear)
+            # Reading full content is safer but slower.
             $content = Get-Content -Path $inf.FullName -ErrorAction SilentlyContinue
             if (-not $content) { continue }
             $text = $content -join "`n"
 
-            # 1. Check for HWID match first (fastest fail)
+            # 1. Check for HWID match
             $matches = $hwidRegex.Matches($text)
             $matchedId = $null
             $isCompatible = $false
@@ -153,16 +167,15 @@ function Install-Drivers {
                 if ($systemHwIds.Contains($m.Value.ToUpper())) {
                     $isCompatible = $true
                     $matchedId = $m.Value.ToUpper()
-                    break # Found at least one match, this INF is relevant
+                    break 
                 }
             }
 
             if ($isCompatible) {
-                # 2. Parse Date/Version if compatible
+                # 2. Parse Date/Version
                 $date = [DateTime]::MinValue
                 $version = "0.0.0.0"
                 
-                # Simple regex for DriverVer
                 if ($text -match "(?m)^\s*DriverVer\s*=\s*(.*)$") {
                     $verStr = $matches[1].Trim().Trim('"')
                     $parts = $verStr -split ","
@@ -177,35 +190,22 @@ function Install-Drivers {
                     Version   = $version
                     MatchedID = $matchedId
                 }
-                # Write-Host "." -NoNewline -ForegroundColor DarkGray
             }
-        }
-        catch {
-            Write-WarningLog "Error reading $($inf.Name)"
-        }
+        } catch {}
     }
-    Write-Host "" # Newline after dots
+    Write-Progress -Activity "Scanning Driver Library" -Completed
 
     if ($compatibleDrivers.Count -eq 0) {
-        Write-WarningLog "No compatible drivers found in the library."
+        Write-Log "WARN" "No compatible drivers found in the library." "Yellow"
         return
     }
 
-    Write-Success "Found $( $compatibleDrivers.Count ) compatible driver files."
+    Write-Log "INFO" "Found $( $compatibleDrivers.Count ) compatible driver files." "Gray"
 
     # C. Select Best Drivers
-    # Group by MatchedID (or just install all unique compatible INFs? 
-    # Better: For each compatible INF, we want to install it. 
-    # But if we have multiple INFs for the SAME ID, we should pick the newest.)
+    Write-Log "INFO" "Selecting best versions..." "Cyan"
     
-    Write-Step "Selecting best versions..."
-    
-    # We group by the INF file path to ensure uniqueness first, then we need to filter.
-    # Actually, if multiple INFs serve the same ID, we want the best one.
-    # Strategy: Group by MatchedID. Pick top 1 for each ID. Collect those INFs.
-    
-    $bestInfs = @{} # Key: INF Path, Value: DriverObject
-
+    $bestInfs = @{} 
     $grouped = $compatibleDrivers | Group-Object MatchedID
     foreach ($g in $grouped) {
         # Sort by Date Desc, then Version Desc
@@ -214,48 +214,58 @@ function Install-Drivers {
     }
 
     $finalList = $bestInfs.Values | Sort-Object Date
-    Write-Info "Selected $( $finalList.Count ) unique driver packages to install."
+    Write-Log "INFO" "Selected $( $finalList.Count ) unique driver packages to install." "Gray"
 
     # D. Install
-    Write-Step "Installing Drivers..."
+    Write-Section "Installing Drivers"
     
+    $stats = @{ Installed = 0; Skipped = 0; Failed = 0; Total = $finalList.Count }
+    $j = 0
+
     foreach ($drv in $finalList) {
-        Write-Host "Installing: " -NoNewline
-        Write-Host "$($drv.Name)" -ForegroundColor Cyan -NoNewline
-        Write-Host " [$($drv.Date.ToShortDateString()) - v$($drv.Version)]" -ForegroundColor DarkGray
-        
+        $j++
+        $percent = [int](($j / $stats.Total) * 100)
+        Write-Progress -Activity "Installing Drivers" -Status "Installing $($drv.Name)" -PercentComplete $percent -CurrentOperation "$j of $($stats.Total)"
+
         $args = @("/add-driver", "`"$($drv.Path)`"", "/install")
-        
         $p = Start-Process -FilePath "pnputil.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru
         
         if ($p.ExitCode -eq 0) {
-            Write-Success "Installed successfully."
-        }
-        elseif ($p.ExitCode -eq 259) {
-            Write-Success "Installed (Reboot required)."
-        }
-        elseif ($p.ExitCode -eq 1) {
-            Write-WarningLog "Not needed (Newer or same version already installed)."
-        }
-        else {
-            Write-ErrorLog "Failed with exit code $($p.ExitCode)."
+            Write-Log "DONE" "$($drv.Name)" "Green"
+            $stats.Installed++
+        } elseif ($p.ExitCode -eq 259) {
+            Write-Log "DONE" "$($drv.Name) (Reboot Req)" "Green"
+            $stats.Installed++
+        } elseif ($p.ExitCode -eq 1) {
+            Write-Log "SKIP" "$($drv.Name) (Up to date)" "Yellow"
+            $stats.Skipped++
+        } else {
+            Write-Log "FAIL" "$($drv.Name) (Code $($p.ExitCode))" "Red"
+            $stats.Failed++
         }
     }
+    Write-Progress -Activity "Installing Drivers" -Completed
+
+    # Summary
+    Write-Section "Summary"
+    Write-Log "INFO" "Total:     $($stats.Total)" "White"
+    Write-Log "INFO" "Installed: $($stats.Installed)" "Green"
+    Write-Log "INFO" "Skipped:   $($stats.Skipped)" "Yellow"
+    Write-Log "INFO" "Failed:    $($stats.Failed)" "Red"
 }
 
 # ---------------------------------------------------------------------------
 # 4. MAIN EXECUTION
 # ---------------------------------------------------------------------------
-Clear-Host
-Write-Header "AutoDeriva Installer"
-Write-Info "Time: $(Get-Date)"
-Write-Info "User: $env:USERNAME"
-Write-Info "Repo: $Script:RepoRoot"
+Write-BrandHeader
+Write-Log "INFO" "Time: $(Get-Date)" "Gray"
+Write-Log "INFO" "User: $env:USERNAME" "Gray"
+Write-Log "INFO" "Repo: $Script:RepoRoot" "Gray"
 
 Copy-CucoToDesktop
 Install-Drivers
 
-Write-Header "Installation Complete"
-Write-Info "Please reboot your system if any drivers requested it."
-Write-Host "`nPress any key to exit..." -ForegroundColor DarkGray
+Write-Section "Complete"
+Write-Log "INFO" "Please reboot your system if any drivers requested it." "Cyan"
+Write-Host "`n   Press any key to exit..." -ForegroundColor DarkGray
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
