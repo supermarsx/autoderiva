@@ -33,5 +33,4 @@ catch {
 }
 finally {
     Write-Host "`n"
-    exit 0
 }
