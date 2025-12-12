@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     AutoDeriva System Setup & Driver Installer (Remote/Hybrid Mode)
     
@@ -135,27 +135,37 @@ $Script:ColorDim = "Gray"
 function Write-BrandHeader {
     # Set Background Color
     try {
-        $Host.UI.RawUI.BackgroundColor = "DarkBlue"
+        $Host.UI.RawUI.BackgroundColor = "Black"
     } catch {
         Write-Verbose "Could not set background color."
     }
     Clear-Host
     
     $Art = @(
-        "      |      "
-        "     /|      "
-        "    /_|      "
-        "  __| |__    "
-        "  \     /    "
-        "   \___/     "
-        "~~~~~~~~~~~~~"
+        ' *        .        ★        .        *        .',
+        '   .        ★          .        *        .        ★',
+        '        ★        .        *        .        ★        .',
+        '   .        *        .        ★        .        *        .',
+        '',
+        '             ´ | ` ',
+        '      ________ |________',
+        '     \__________________/',
+        '',
+        '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+        '   ~~~~~~\____/~~~~\____/~~~~\____/~~~~\____/~~~~~~',
+        ' ~~~~~\____/~~~~\____/~~~~\____/~~~~\____/~~~~\____/~~~~'
     )
     
-    $Rainbow = @('Red', 'DarkYellow', 'Yellow', 'Green', 'Cyan', 'Blue', 'Magenta', 'DarkMagenta')
+    $Rainbow = @('Red', 'DarkYellow', 'Yellow', 'Green', 'Magenta', 'DarkMagenta')
+    $SeaColors = @('Cyan', 'DarkCyan', 'Blue', 'DarkBlue')
     
-    foreach ($Line in $Art) {
-        $Color = $Rainbow[$Art.IndexOf($Line) % $Rainbow.Count]
-        Write-Host $Line -ForegroundColor $Color
+    for ($i = 0; $i -lt $Art.Count; $i++) {
+        if ($i -ge 9) {
+            $Color = $SeaColors[$i % $SeaColors.Count]
+        } else {
+            $Color = $Rainbow[$i % $Rainbow.Count]
+        }
+        Write-Host $Art[$i] -ForegroundColor $Color
     }
     
     Write-Host "   System Setup & Driver Installer" -ForegroundColor $Script:ColorDim
@@ -608,3 +618,5 @@ function Main {
 # ---------------------------------------------------------------------------
 
 Main
+
+
