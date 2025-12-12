@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 # Determine the repository root (assuming script is in /scripts)
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $driversPath = Join-Path $repoRoot "drivers"
-$outputFile = Join-Path $repoRoot "non_driver_folders.txt"
+$outputFile = Join-Path $repoRoot "exports\non_driver_folders.txt"
 
 Write-Host "Scanning for non-driver folders in: $driversPath"
 

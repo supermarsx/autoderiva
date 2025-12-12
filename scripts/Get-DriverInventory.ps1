@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 # Determine paths
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $driversPath = Join-Path $repoRoot "drivers"
-$outputFile = Join-Path $repoRoot "driver_inventory.csv"
+$outputFile = Join-Path $repoRoot "exports\driver_inventory.csv"
 
 Write-Host "Scanning for drivers in: $driversPath"
 

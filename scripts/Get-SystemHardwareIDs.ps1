@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 # Determine paths
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$outputFile = Join-Path $repoRoot "system_hardware_ids.csv"
+$outputFile = Join-Path $repoRoot "exports\system_hardware_ids.csv"
 
 Write-Host "Scanning current system for hardware devices..."
 
