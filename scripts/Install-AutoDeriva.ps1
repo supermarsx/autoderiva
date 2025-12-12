@@ -1,32 +1,30 @@
-﻿<#
-.SYNOPSIS
-    AutoDeriva System Setup "&" Driver Installer (Remote/Hybrid Mode)
-    
-.DESCRIPTION
-    This script performs the following actions:
-    1. Loads configuration from config.json.
-    2. Downloads the driver inventory from the remote repository.
-    3. Scans the local system for Hardware IDs.
-    4. Matches system devices against the remote driver inventory.
-    5. If matches are found:
-       - Downloads the file manifest.
-       - Downloads all required files for the matched drivers to a temporary directory.
-       - Reconstructs the folder structure.
-       - Installs drivers using PnPUtil.
-    6. Cleans up temporary files.
-    
-    Features:
-    - Auto-elevation (Runs as Administrator)
-    - TUI with color-coded output
-    - Smart driver matching based on Hardware IDs
-    - Remote file fetching (no local drivers folder required)
-    - Detailed logging to file and console
-    - In-memory caching of inventory and manifest to prevent redundant downloads
-
-.EXAMPLE
-    Run from PowerShell:
-    .\Install-AutoDeriva.ps1
-#>
+﻿# .SYNOPSIS
+#     AutoDeriva System Setup "&" Driver Installer (Remote/Hybrid Mode)
+#    
+# .DESCRIPTION
+#     This script performs the following actions:
+#     1. Loads configuration from config.json.
+#     2. Downloads the driver inventory from the remote repository.
+#     3. Scans the local system for Hardware IDs.
+#     4. Matches system devices against the remote driver inventory.
+#     5. If matches are found:
+#        - Downloads the file manifest.
+#        - Downloads all required files for the matched drivers to a temporary directory.
+#        - Reconstructs the folder structure.
+#        - Installs drivers using PnPUtil.
+#     6. Cleans up temporary files.
+#    
+#     Features:
+#     - Auto-elevation (Runs as Administrator)
+#     - TUI with color-coded output
+#     - Smart driver matching based on Hardware IDs
+#     - Remote file fetching (no local drivers folder required)
+#     - Detailed logging to file and console
+#     - In-memory caching of inventory and manifest to prevent redundant downloads
+#
+# .EXAMPLE
+#     Run from PowerShell:
+#     .\Install-AutoDeriva.ps1
 
 # ---------------------------------------------------------------------------
 # 1. AUTO-ELEVATION
@@ -146,12 +144,10 @@ $Script:ColorText = "White"
 $Script:ColorAccent = "Blue"
 $Script:ColorDim = "Gray"
 
-<#
-.SYNOPSIS
-    Displays the AutoDeriva brand header.
-.DESCRIPTION
-    Clears the host and prints the ASCII art logo and title.
-#>
+# .SYNOPSIS
+#     Displays the AutoDeriva brand header.
+# .DESCRIPTION
+#     Clears the host and prints the ASCII art logo and title.
 function Write-BrandHeader {
     # Set Background Color
     try {
@@ -193,12 +189,10 @@ function Write-BrandHeader {
     Write-Host "`n"
 }
 
-<#
-.SYNOPSIS
-    Writes a section header to the console and log file.
-.PARAMETER Title
-    The title of the section.
-#>
+# .SYNOPSIS
+#     Writes a section header to the console and log file.
+# .PARAMETER Title
+#     The title of the section.
 function Write-Section {
     param([string]$Title)
     Write-Host "`n   [$Title]" -ForegroundColor $Script:ColorHeader
@@ -208,16 +202,14 @@ function Write-Section {
     }
 }
 
-<#
-.SYNOPSIS
-    Writes a log message to the console and log file.
-.PARAMETER Status
-    The status tag (e.g., INFO, ERROR, SUCCESS).
-.PARAMETER Message
-    The message to log.
-.PARAMETER Color
-    The color of the status tag in the console.
-#>
+# .SYNOPSIS
+#     Writes a log message to the console and log file.
+# .PARAMETER Status
+#     The status tag (e.g., INFO, ERROR, SUCCESS).
+# .PARAMETER Message
+#     The message to log.
+# .PARAMETER Color
+#     The color of the status tag in the console.
 function Write-AutoDerivaLog {
     param(
         [string]$Status,
@@ -280,12 +272,10 @@ function Write-AutoDerivaLog {
 # Global cache for downloaded CSVs to avoid re-fetching
 $Script:CsvCache = @{}
 
-<#
-.SYNOPSIS
-    Formats a byte count into a human-readable string.
-.PARAMETER Bytes
-    The number of bytes.
-#>
+# .SYNOPSIS
+#     Formats a byte count into a human-readable string.
+# .PARAMETER Bytes
+#     The number of bytes.
 function Format-FileSize {
     param([long]$Bytes)
     $sizes = @("B", "KB", "MB", "GB", "TB")
@@ -297,18 +287,16 @@ function Format-FileSize {
     return "{0:N2} {1}" -f $Bytes, $sizes[$i]
 }
 
-<#
-.SYNOPSIS
-    Downloads a file from a URL to a local path with retry logic and exponential backoff.
-.PARAMETER Url
-    The URL of the file to download.
-.PARAMETER OutputPath
-    The local path where the file should be saved.
-.PARAMETER MaxRetries
-    Number of times to retry the download.
-.OUTPUTS
-    Boolean. True if successful, False otherwise.
-#>
+# .SYNOPSIS
+#     Downloads a file from a URL to a local path with retry logic and exponential backoff.
+# .PARAMETER Url
+#     The URL of the file to download.
+# .PARAMETER OutputPath
+#     The local path where the file should be saved.
+# .PARAMETER MaxRetries
+#     Number of times to retry the download.
+# .OUTPUTS
+#     Boolean. True if successful, False otherwise.
 function Invoke-DownloadFile {
     param($Url, $OutputPath, $MaxRetries = $Config.MaxRetries)
     try {
@@ -348,16 +336,14 @@ function Invoke-DownloadFile {
     }
 }
 
-<#
-.SYNOPSIS
-    Checks if there is enough free disk space on the drive.
-.PARAMETER Path
-    The path to check.
-.PARAMETER MinMB
-    Minimum required space in Megabytes.
-.OUTPUTS
-    Boolean.
-#>
+# .SYNOPSIS
+#     Checks if there is enough free disk space on the drive.
+# .PARAMETER Path
+#     The path to check.
+# .PARAMETER MinMB
+#     Minimum required space in Megabytes.
+# .OUTPUTS
+#     Boolean.
 function Test-DiskSpace {
     param($Path, $MinMB = $Config.MinDiskSpaceMB)
     try {
@@ -379,18 +365,14 @@ function Test-DiskSpace {
     }
 }
 
-<#
-.SYNOPSIS
-    Fetches a CSV file from a remote URL and parses it.
-.PARAMETER Url
-    The URL of the CSV file.
-.OUTPUTS
-    PSCustomObject[]. The parsed CSV data.
-#>
+# .SYNOPSIS
+#     Fetches a CSV file from a remote URL and parses it.
+# .PARAMETER Url
+#     The URL of the CSV file.
+# .OUTPUTS
+#     PSCustomObject[]. The parsed CSV data.
 function Get-RemoteCsv {
     param($Url)
-    
-    # Check cache first
     if ($Script:CsvCache.ContainsKey($Url)) {
         Write-AutoDerivaLog "INFO" "Using cached data for: $Url" "Cyan"
         return $Script:CsvCache[$Url]
@@ -413,16 +395,12 @@ function Get-RemoteCsv {
     }
 }
 
-<#
-.SYNOPSIS
-    Performs pre-flight checks before starting the installation.
-.DESCRIPTION
-    Checks for internet connectivity.
-#>
+# .SYNOPSIS
+#     Performs pre-flight checks before starting the installation.
+# .DESCRIPTION
+#     Checks for internet connectivity.
 function Test-PreFlight {
     Write-Section "Pre-flight Checks"
-    
-    # Check Internet Connection
     try {
         $testUrl = "https://github.com"
         $request = [System.Net.WebRequest]::Create($testUrl)
@@ -435,12 +413,10 @@ function Test-PreFlight {
     }
 }
 
-<#
-.SYNOPSIS
-    Retrieves the Hardware IDs of the current system.
-.OUTPUTS
-    String[]. A list of Hardware IDs.
-#>
+# .SYNOPSIS
+#     Retrieves the Hardware IDs of the current system.
+# .OUTPUTS
+#     String[]. A list of Hardware IDs.
 function Get-SystemHardware {
     Write-Section "Hardware Detection"
     Write-AutoDerivaLog "INFO" "Scanning system devices..." "Cyan"
@@ -457,16 +433,14 @@ function Get-SystemHardware {
     return $SystemHardwareIds
 }
 
-<#
-.SYNOPSIS
-    Finds compatible drivers from the inventory based on system Hardware IDs.
-.PARAMETER DriverInventory
-    The driver inventory list.
-.PARAMETER SystemHardwareIds
-    The list of system Hardware IDs.
-.OUTPUTS
-    PSCustomObject[]. A list of compatible driver objects.
-#>
+# .SYNOPSIS
+#     Finds compatible drivers from the inventory based on system Hardware IDs.
+# .PARAMETER DriverInventory
+#     The driver inventory list.
+# .PARAMETER SystemHardwareIds
+#     The list of system Hardware IDs.
+# .OUTPUTS
+#     PSCustomObject[]. A list of compatible driver objects.
 function Find-CompatibleDriver {
     param($DriverInventory, $SystemHardwareIds)
     
@@ -488,16 +462,14 @@ function Find-CompatibleDriver {
     return $DriverMatches
 }
 
-<#
-.SYNOPSIS
-    Downloads and installs the matched drivers.
-.PARAMETER DriverMatches
-    The list of compatible drivers.
-.PARAMETER TempDir
-    The temporary directory to use for downloads.
-.OUTPUTS
-    PSCustomObject[]. List of installation results.
-#>
+# .SYNOPSIS
+#     Downloads and installs the matched drivers.
+# .PARAMETER DriverMatches
+#     The list of compatible drivers.
+# .PARAMETER TempDir
+#     The temporary directory to use for downloads.
+# .OUTPUTS
+#     PSCustomObject[]. List of installation results.
 function Install-Driver {
     param($DriverMatches, $TempDir)
     
@@ -607,10 +579,8 @@ function Install-Driver {
     return $Results
 }
 
-<#
-.SYNOPSIS
-    Downloads the Cuco binary to the configured directory.
-#>
+# .SYNOPSIS
+#     Downloads the Cuco binary to the configured directory.
 function Install-Cuco {
     if (-not $Config.DownloadCuco) {
         Write-AutoDerivaLog "INFO" "Cuco download is disabled in configuration." "Gray"
@@ -674,10 +644,8 @@ function Install-Cuco {
     }
 }
 
-<#
-.SYNOPSIS
-    Downloads all files from the manifest to the temp directory.
-#>
+# .SYNOPSIS
+#     Downloads all files from the manifest to the temp directory.
 function Invoke-DownloadAllFile {
     param($TempDir)
     
@@ -712,10 +680,8 @@ function Invoke-DownloadAllFile {
     Write-AutoDerivaLog "SUCCESS" "All files downloaded to $TempDir" "Green"
 }
 
-<#
-.SYNOPSIS
-    Main execution function.
-#>
+# .SYNOPSIS
+#     Main execution function.
 function Main {
     try {
         Write-BrandHeader
