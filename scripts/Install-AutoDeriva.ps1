@@ -66,6 +66,9 @@ $DefaultConfig = @{
     MaxRetries = 5
     MaxBackoffSeconds = 60
     MinDiskSpaceMB = 3072
+    CheckDiskSpace = $true
+    MaxConcurrentDownloads = 6
+    SingleDownloadMode = $false
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -110,6 +113,12 @@ if (Test-Path $ConfigFile) {
     } catch {
         Write-Warning "Failed to parse local overrides."
     }
+}
+
+# Apply SingleDownloadMode override
+if ($Config.SingleDownloadMode) {
+    Write-Host "Single Download Mode enabled. Forcing MaxConcurrentDownloads to 1." -ForegroundColor Yellow
+    $Config.MaxConcurrentDownloads = 1
 }
 
 # Initialize Stats
@@ -490,19 +499,12 @@ function Install-Driver {
     
     # Group matches by INF path to avoid duplicate downloads
     $UniqueInfs = $DriverMatches | Select-Object -ExpandProperty InfPath -Unique
-    $totalDrivers = $UniqueInfs.Count
-    $currentDriverIndex = 0
     
-    foreach ($infPath in $UniqueInfs) {
-        $currentDriverIndex++
-        $driverPercent = [math]::Min(100, [int](($currentDriverIndex / $totalDrivers) * 100))
-        
-        Write-Progress -Id 1 -Activity "Installing Drivers" -Status "Processing $infPath ($currentDriverIndex/$totalDrivers)" -PercentComplete $driverPercent
+    # 1. Collect all files to download
+    $AllFilesToDownload = @()
+    $DriversToInstall = @() # Keep track of valid drivers (those with files)
 
-        Write-AutoDerivaLog "PROCESS" "Processing driver: $infPath" "Cyan"
-        
-        # Find all files associated with this INF in the manifest
-        # Note: AssociatedInf in manifest uses forward slashes, ensure matching format
+    foreach ($infPath in $UniqueInfs) {
         $TargetInf = $infPath.Replace('\', '/')
         $DriverFiles = $FileManifest | Where-Object { $_.AssociatedInf -eq $TargetInf }
         
@@ -512,45 +514,32 @@ function Install-Driver {
             continue
         }
         
-        $totalFiles = $DriverFiles.Count
-        $currentFileIndex = 0
-        $downloadFailed = $false
-
-        foreach ($file in $DriverFiles) {
-            $currentFileIndex++
-            $fileName = Split-Path $file.RelativePath.Replace('/', '\') -Leaf
-            $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
-            
-            $sizeStr = ""
-            if ($file.Size) {
-                $sizeStr = " (" + (Format-FileSize $file.Size) + ")"
-            }
-
-            Write-Progress -Id 2 -ParentId 1 -Activity "Downloading Files" -Status "$fileName$sizeStr" -PercentComplete $percentComplete
-
-            $remoteUrl = $Config.BaseUrl + $file.RelativePath
-            # Reconstruct path in TempDir
-            $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
-            
-            $dlResult = Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
-            if ($dlResult) {
-                $Script:Stats.FilesDownloaded++
-            } else {
-                $downloadFailed = $true
-                break
-            }
-        }
-        Write-Progress -Id 2 -Completed
+        $DriversToInstall += $infPath
         
-        if ($downloadFailed) {
-            Write-AutoDerivaLog "ERROR" "Aborting installation for $infPath due to download failure." "Red"
-            $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "Download Error" }
-            $Script:Stats.DriversFailed++
-            continue
+        foreach ($file in $DriverFiles) {
+            $remoteUrl = $Config.BaseUrl + $file.RelativePath
+            $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
+            $AllFilesToDownload += @{ Url = $remoteUrl; OutputPath = $localPath }
         }
-
-        # Install Driver
-        # The INF file is at $TempDir + $infPath
+    }
+    
+    # 2. Download concurrently
+    if ($AllFilesToDownload.Count -gt 0) {
+        Invoke-ConcurrentDownload -FileList $AllFilesToDownload -MaxConcurrency $Config.MaxConcurrentDownloads
+        $Script:Stats.FilesDownloaded += $AllFilesToDownload.Count
+    }
+    
+    # 3. Install Drivers
+    $totalDrivers = $DriversToInstall.Count
+    $currentDriverIndex = 0
+    
+    foreach ($infPath in $DriversToInstall) {
+        $currentDriverIndex++
+        $driverPercent = [math]::Min(100, [int](($currentDriverIndex / $totalDrivers) * 100))
+        Write-Progress -Id 1 -Activity "Installing Drivers" -Status "Processing $infPath ($currentDriverIndex/$totalDrivers)" -PercentComplete $driverPercent
+        
+        Write-AutoDerivaLog "PROCESS" "Processing driver: $infPath" "Cyan"
+        
         $LocalInfPath = Join-Path $TempDir $infPath.Replace('/', '\')
         
         if (Test-Path $LocalInfPath) {
@@ -656,29 +645,118 @@ function Invoke-DownloadAllFile {
     $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
     $FileManifest = Get-RemoteCsv -Url $ManifestUrl
     
-    $totalFiles = $FileManifest.Count
-    $currentFileIndex = 0
-    
+    $FileList = @()
     foreach ($file in $FileManifest) {
-        $currentFileIndex++
-        $fileName = Split-Path $file.RelativePath.Replace('/', '\') -Leaf
-        $percentComplete = [math]::Min(100, [int](($currentFileIndex / $totalFiles) * 100))
-        
-        $sizeStr = ""
-        if ($file.Size) {
-            $sizeStr = " (" + (Format-FileSize $file.Size) + ")"
-        }
-
-        Write-Progress -Activity "Downloading All Files" -Status "Downloading $fileName$sizeStr ($currentFileIndex/$totalFiles)" -PercentComplete $percentComplete
-        
         $remoteUrl = $Config.BaseUrl + $file.RelativePath
         $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
-        
-        Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
-        $Script:Stats.FilesDownloaded++
+        $FileList += @{ Url = $remoteUrl; OutputPath = $localPath }
     }
-    Write-Progress -Activity "Downloading All Files" -Completed
-    Write-AutoDerivaLog "SUCCESS" "All files downloaded to $TempDir" "Green"
+    
+    Invoke-ConcurrentDownload -FileList $FileList -MaxConcurrency $Config.MaxConcurrentDownloads
+    $Script:Stats.FilesDownloaded += $FileList.Count
+}
+
+# .SYNOPSIS
+#     Downloads multiple files concurrently using Runspaces.
+# .PARAMETER FileList
+#     Array of hashtables/objects with Url and OutputPath properties.
+# .PARAMETER MaxConcurrency
+#     Maximum number of concurrent downloads.
+function Invoke-ConcurrentDownload {
+    param($FileList, $MaxConcurrency = 6)
+
+    if ($FileList.Count -eq 0) { return }
+
+    Write-AutoDerivaLog "INFO" "Starting concurrent download of $( $FileList.Count ) files..." "Cyan"
+
+    $RunspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxConcurrency)
+    $RunspacePool.Open()
+
+    $ScriptBlock = {
+        param($Url, $OutputPath, $MaxRetries)
+        $ErrorActionPreference = "Stop"
+        try {
+            $dir = Split-Path $OutputPath -Parent
+            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+            
+            $retryCount = 0
+            $success = $false
+            $backoff = 2
+            
+            while (-not $success -and $retryCount -lt $MaxRetries) {
+                try {
+                    # Use .NET WebClient for better compatibility in runspaces
+                    $webClient = New-Object System.Net.WebClient
+                    $webClient.DownloadFile($Url, $OutputPath)
+                    $success = $true
+                } catch {
+                    $retryCount++
+                    if ($retryCount -lt $MaxRetries) {
+                        Start-Sleep -Seconds $backoff
+                        $backoff = [math]::Min($backoff * 2, 60)
+                    }
+                }
+            }
+            
+            if ($success) { 
+                return @{ Success = $true; Url = $Url } 
+            } else { 
+                return @{ Success = $false; Url = $Url; Error = "Max retries exceeded" } 
+            }
+        } catch {
+            return @{ Success = $false; Url = $Url; Error = $_.ToString() }
+        }
+    }
+
+    $Jobs = @()
+    foreach ($file in $FileList) {
+        $PS = [powershell]::Create().AddScript($ScriptBlock).AddArgument($file.Url).AddArgument($file.OutputPath).AddArgument(5)
+        $PS.RunspacePool = $RunspacePool
+        $Jobs += @{
+            PS = $PS
+            Handle = $PS.BeginInvoke()
+            File = $file
+        }
+    }
+
+    # Wait for completion
+    $total = $Jobs.Count
+    while (($Jobs | Where-Object { $_.Handle.IsCompleted }).Count -lt $total) {
+        $completed = ($Jobs | Where-Object { $_.Handle.IsCompleted }).Count
+        $percent = [math]::Min(100, [int](($completed / $total) * 100))
+        Write-Progress -Activity "Downloading Files (Concurrent)" -Status "$completed / $total files" -PercentComplete $percent
+        Start-Sleep -Milliseconds 200
+    }
+    Write-Progress -Activity "Downloading Files (Concurrent)" -Completed
+
+    # Process results
+    $failedCount = 0
+    foreach ($job in $Jobs) {
+        try {
+            $result = $job.PS.EndInvoke($job.Handle)
+            if ($result -and $result.Success) {
+                # Success
+            } else {
+                $failedCount++
+                $err = if ($result) { $result.Error } else { "Unknown error" }
+                Write-AutoDerivaLog "WARN" "Failed to download: $($job.File.Url) - $err" "Yellow"
+            }
+        } catch {
+            $failedCount++
+            Write-AutoDerivaLog "ERROR" "Job processing error: $_" "Red"
+        } finally {
+            $job.PS.Dispose()
+        }
+    }
+    
+    $RunspacePool.Close()
+    $RunspacePool.Dispose()
+
+    if ($failedCount -gt 0) {
+        Write-AutoDerivaLog "WARN" "$failedCount files failed to download." "Yellow"
+    } else {
+        Write-AutoDerivaLog "SUCCESS" "All files downloaded successfully." "Green"
+    }
 }
 
 # .SYNOPSIS
@@ -699,7 +777,7 @@ function Main {
         Write-AutoDerivaLog "INFO" "Temporary workspace: $TempDir" "Gray"
 
         # Check Disk Space
-        if (-not (Test-DiskSpace -Path $TempDir)) {
+        if ($Config.CheckDiskSpace -and -not (Test-DiskSpace -Path $TempDir)) {
             Write-AutoDerivaLog "FATAL" "Not enough disk space to proceed." "Red"
             return
         }

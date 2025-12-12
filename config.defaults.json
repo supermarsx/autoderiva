@@ -10,5 +10,8 @@
     "CucoTargetDir": "Desktop",
     "MaxRetries": 5,
     "MaxBackoffSeconds": 60,
-    "MinDiskSpaceMB": 3072
+    "MinDiskSpaceMB": 3072,
+    "CheckDiskSpace": true,
+    "MaxConcurrentDownloads": 6,
+    "SingleDownloadMode": false
 }
