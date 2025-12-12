@@ -15,7 +15,7 @@
 Run the installer directly from PowerShell with this one-liner:
 
 ```powershell
-powershell -Command "iex (irm https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1)"
+irm https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1 | iex
 ```
 
 ## ✨ Features

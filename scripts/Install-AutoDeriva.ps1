@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    AutoDeriva System Setup & Driver Installer (Remote/Hybrid Mode)
+    AutoDeriva System Setup "&" Driver Installer (Remote/Hybrid Mode)
     
 .DESCRIPTION
     This script performs the following actions:
