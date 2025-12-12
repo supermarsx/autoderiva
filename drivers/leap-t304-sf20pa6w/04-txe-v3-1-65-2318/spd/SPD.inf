@@ -1,0 +1,154 @@
+;*******************************************************************************
+;*                                                                            **
+;*                     I N T E L   P R O P R I E T A R Y                      **
+;*                                                                            **
+;*   COPYRIGHT (c) 2015 BY INTEL CORPORATION. ALL RIGHTS RESERVED.  NO        **
+;*   PART  OF  THIS  PROGRAM OR PUBLICATION MAY BE REPRODUCED, TRANSMITTED,   **
+;*   TRANSCRIBED, STORED IN A RETRIEVAL  SYSTEM,  OR  TRANSLATED  INTO  ANY   **
+;*   LANGUAGE OR COMPUTER LANGUAGE IN ANY FORM OR BY ANY MEANS, ELECTRONIC,   **
+;*   MECHANICAL, MAGNETIC, OPTICAL, CHEMICAL, MANUAL, OR OTHERWISE, WITHOUT   **
+;*   THE PRIOR WRITTEN PERMISSION OF :                                        **
+;*                                                                            **
+;*                             INTEL CORPORATION                              **
+;*                                                                            **
+;*                          2200 MISSION COLLEGE BLVD                         **
+;*                                                                            **
+;*                     SANTA CLARA, CALIFORNIA 95052-8119                     **
+;*                                                                            **
+;*******************************************************************************
+;
+;
+; File Name: SPD.inf
+; Install information file for SPD Driver
+;--------- Version Section ---------------------------------------------------
+;
+; SPD.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=System 
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%ManufacturerName%
+CatalogFile=SPD.cat
+DriverVer=06/14/2016,3.0.0.1104
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+; ================= Class section =====================
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles.x86]
+SPD.sys  = 1,,
+
+[SourceDisksFiles.amd64]
+SPDx64.sys  = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName%=Intel, NTx86.6.2, NTamd64.6.2
+
+[Intel.NTx86.6.2]
+%SPD.DeviceDesc%=SPD_DDI, {55BC022C-955B-4D87-A88D-D3E68CBEB2F4}\CT_2A39291F-5551-482F-99CB-9E2274978CA8
+
+[Intel.ntamd64.6.2]
+%SPD.DeviceDesc%=SPD_DDI_x64, {55BC022C-955B-4D87-A88D-D3E68CBEB2F4}\CT_2A39291F-5551-482F-99CB-9E2274978CA8
+
+[SPD_DDI]
+CopyFiles=SPD_Files_Driver
+AddProperty=WDTFSOCDeviceCategory
+
+[SPD_DDI_x64]
+CopyFiles=SPD_Files_Driver_x64
+AddProperty=WDTFSOCDeviceCategory
+
+[WDTFSOCDeviceCategory]
+{5D078032-6378-437B-8DA5-9B32B7CA3FDD},2,7,,1
+
+; --------- Files ----------------------
+[SPD_Files_Driver]
+SPD.sys
+
+[SPD_Files_Driver_x64]
+SPDx64.sys
+
+
+;-------------- Service installation
+[SPIER_DDI.Services]
+AddService = SPIER,%SPSVCINST_ASSOCSERVICE%, SPIER_Service_Inst
+[SPIER_DDI.Services]
+AddService = SPIER, %SPSVCINST_ASSOCSERVICE%, SPIER_Service_Inst, SPD.EventLog
+[SPD_DDI.Services]
+AddService = SPD,%SPSVCINST_ASSOCSERVICE%, SPD_Service_Inst
+
+; -------------- SPD driver install sections
+[SPD_Service_Inst]
+DisplayName    = %SPD.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\SPD.sys
+LoadOrderGroup = Extended Base
+
+[SPIER_DDI_x64.Services]
+AddService = SPIERx64,%SPSVCINST_ASSOCSERVICE%, SPIER_Service_Inst_x64
+[SPIER_DDI_x64.Services]
+AddService = SPIERx64, %SPSVCINST_ASSOCSERVICE%, SPIER_Service_Inst_x64, SPDx64.EventLog
+[SPD_DDI_x64.Services]
+AddService = SPDx64,%SPSVCINST_ASSOCSERVICE%, SPD_Service_Inst_x64
+
+; -------------- SPD driver install sections
+[SPD_Service_Inst_x64]
+DisplayName    = %SPD.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\SPDx64.sys
+LoadOrderGroup = Extended Base
+
+;
+; -------------- SPD driver Event log sections
+;--- SPD_Device Coinstaller installation ------
+;
+[SPD.EventLog]
+AddReg = SPD.EventLog.reg
+
+[SPD.EventLog.reg]
+HKR, , EventMessageFile, 0x00020000, %EventLogMessageDllPath%
+HKR, , TypesSupported,   0x00010001, 7
+
+[SPDx64.EventLog]
+AddReg = SPDx64.EventLog.reg
+
+[SPDx64.EventLog.reg]
+HKR, , EventMessageFile, 0x00020000, %EventLogMessageDllPath_x64%
+HKR, , TypesSupported,   0x00010001, 7
+
+;
+;
+
+[SPD_DDI.Wdf]
+KmdfService =  SPD, SPD_wdfsect
+
+[SPD_DDI_x64.Wdf]
+KmdfService =  SPDx64, SPD_wdfsect
+
+[SPD_wdfsect]
+KmdfLibraryVersion = 1.11
+
+[Strings]
+
+EventLogMessageDllPath="%%SystemRoot%%\System32\IoLogMsg.dll"
+EventLogMessageDllPath_x64="%%SystemRoot%%\System32\IoLogMsg.dll"
+
+SPSVCINST_ASSOCSERVICE= 0x00000002
+ManufacturerName="Intel"
+ClassName="System" 
+DiskName = "Intel(R) Trusted Execution Engine Storage Proxy Driver Installation Disk"
+SPD.DeviceDesc = "Intel(R) Trusted Execution Engine Storage Proxy Device"
+SPD.SVCDESC = "Intel(R) Trusted Execution Engine Storage Proxy Service"
