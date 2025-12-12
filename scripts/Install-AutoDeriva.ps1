@@ -43,13 +43,13 @@ $Script:RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 # ---------------------------------------------------------------------------
 # 2. TUI HELPER FUNCTIONS (Blue Theme)
 # ---------------------------------------------------------------------------
-$ColorHeader  = "Cyan"
-$ColorText    = "White"
-$ColorAccent  = "Blue"
+$ColorHeader = "Cyan"
+$ColorText = "White"
+$ColorAccent = "Blue"
 $ColorSuccess = "Green"
 $ColorWarning = "Yellow"
-$ColorError   = "Red"
-$ColorDim     = "Gray"
+$ColorError = "Red"
+$ColorDim = "Gray"
 
 function Write-BrandHeader {
     Clear-Host
@@ -64,14 +64,14 @@ function Write-BrandHeader {
     Write-Host "   AUTO" -NoNewline -ForegroundColor $ColorAccent
     Write-Host "DERIVA" -ForegroundColor $ColorHeader
     Write-Host "   System Setup & Driver Installer" -ForegroundColor $ColorDim
-    Write-Host "   " ("-"*60) -ForegroundColor $ColorAccent
+    Write-Host "   " ("-" * 60) -ForegroundColor $ColorAccent
     Write-Host "`n"
 }
 
 function Write-Section {
     param([string]$Title)
     Write-Host "`n   [$Title]" -ForegroundColor $ColorHeader
-    Write-Host "   " ("-"*($Title.Length+2)) -ForegroundColor $ColorAccent
+    Write-Host "   " ("-" * ($Title.Length + 2)) -ForegroundColor $ColorAccent
 }
 
 function Write-Log {
@@ -106,10 +106,12 @@ function Copy-CucoToDesktop {
         Copy-Item -Path $sourcePath -Destination $destPath -Force
         if (Test-Path $destPath) {
             Write-Log "DONE" "CtoolGui.exe copied to Desktop." "Green"
-        } else {
+        }
+        else {
             Write-Log "FAIL" "Failed to verify file at destination." "Red"
         }
-    } catch {
+    }
+    catch {
         Write-Log "FAIL" "Copy failed: $_" "Red"
     }
 }
@@ -191,7 +193,8 @@ function Install-Drivers {
                     MatchedID = $matchedId
                 }
             }
-        } catch {}
+        }
+        catch {}
     }
     Write-Progress -Activity "Scanning Driver Library" -Completed
 
@@ -233,13 +236,16 @@ function Install-Drivers {
         if ($p.ExitCode -eq 0) {
             Write-Log "DONE" "$($drv.Name)" "Green"
             $stats.Installed++
-        } elseif ($p.ExitCode -eq 259) {
+        }
+        elseif ($p.ExitCode -eq 259) {
             Write-Log "DONE" "$($drv.Name) (Reboot Req)" "Green"
             $stats.Installed++
-        } elseif ($p.ExitCode -eq 1) {
+        }
+        elseif ($p.ExitCode -eq 1) {
             Write-Log "SKIP" "$($drv.Name) (Up to date)" "Yellow"
             $stats.Skipped++
-        } else {
+        }
+        else {
             Write-Log "FAIL" "$($drv.Name) (Code $($p.ExitCode))" "Red"
             $stats.Failed++
         }
