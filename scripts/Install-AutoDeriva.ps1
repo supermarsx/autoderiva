@@ -50,7 +50,8 @@ $DefaultConfig = @{
     BaseUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
     InventoryPath = "exports/driver_inventory.csv"
     ManifestPath = "exports/driver_file_manifest.csv"
-    LogFile = "AutoDeriva.log"
+    EnableLogging = $false
+    LogLevel = "INFO"
 }
 
 # Try to load local config first
@@ -86,18 +87,29 @@ if (Test-Path $ConfigFile) {
     }
 }
 
-# Ensure LogFile path is absolute
-if (-not [System.IO.Path]::IsPathRooted($Config.LogFile)) {
-    $LogFilePath = Join-Path $Script:RepoRoot $Config.LogFile
-} else {
-    $LogFilePath = $Config.LogFile
+# Initialize Stats
+$Script:Stats = @{
+    StartTime = Get-Date
+    DriversScanned = 0
+    DriversMatched = 0
+    FilesDownloaded = 0
+    DriversInstalled = 0
+    DriversFailed = 0
+    RebootsRequired = 0
 }
 
 # Initialize Log
-try {
-    "AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
-} catch {
-    Write-Warning "Could not write to log file at $LogFilePath. Logging to console only."
+if ($Config.EnableLogging) {
+    $LogFileName = "autoderiva-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+    $LogFilePath = Join-Path $Script:RepoRoot $LogFileName
+    try {
+        "AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
+        Write-Host "Logging enabled. Log file: $LogFilePath" -ForegroundColor Gray
+    } catch {
+        Write-Warning "Could not write to log file at $LogFilePath. Logging to console only."
+        $LogFilePath = $null
+    }
+} else {
     $LogFilePath = $null
 }
 
@@ -158,15 +170,46 @@ function Write-AutoDerivaLog {
         [string]$Message,
         [string]$Color = "White"
     )
-    # Console Output
-    Write-Host "   [" -NoNewline -ForegroundColor $ColorDim
-    Write-Host "$Status" -NoNewline -ForegroundColor $Color
-    Write-Host "] $Message" -ForegroundColor $ColorText
+
+    # Log Levels
+    $Levels = @{
+        "DEBUG" = 1
+        "INFO"  = 2
+        "WARN"  = 3
+        "ERROR" = 4
+        "FATAL" = 5
+    }
+
+    # Map Status to Level
+    $CurrentLevel = "INFO"
+    switch ($Status) {
+        "DEBUG"   { $CurrentLevel = "DEBUG" }
+        "WARN"    { $CurrentLevel = "WARN" }
+        "ERROR"   { $CurrentLevel = "ERROR" }
+        "FATAL"   { $CurrentLevel = "FATAL" }
+        default   { $CurrentLevel = "INFO" }
+    }
+
+    $ConfigLevel = "INFO"
+    if ($Config.LogLevel) { $ConfigLevel = $Config.LogLevel }
     
-    # File Output
-    if ($LogFilePath) {
-        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        Add-Content -Path $LogFilePath -Value "[$timestamp] [$Status] $Message" -ErrorAction SilentlyContinue
+    $ConfigLevelVal = $Levels[$ConfigLevel.ToUpper()]
+    if (-not $ConfigLevelVal) { $ConfigLevelVal = 2 }
+
+    $MsgLevelVal = $Levels[$CurrentLevel]
+    
+    # Filter
+    if ($MsgLevelVal -ge $ConfigLevelVal) {
+        # Console Output
+        Write-Host "   [" -NoNewline -ForegroundColor $ColorDim
+        Write-Host "$Status" -NoNewline -ForegroundColor $Color
+        Write-Host "] $Message" -ForegroundColor $ColorText
+        
+        # File Output
+        if ($LogFilePath) {
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Add-Content -Path $LogFilePath -Value "[$timestamp] [$Status] $Message" -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -276,6 +319,7 @@ function Get-SystemHardware {
     }
     
     $SystemHardwareIds = $SystemDevices.HardwareID | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
+    $Script:Stats.DriversScanned = $SystemHardwareIds.Count
     Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
     return $SystemHardwareIds
 }
@@ -307,6 +351,7 @@ function Find-CompatibleDriver {
             $DriverMatches += $driver
         }
     }
+    $Script:Stats.DriversMatched = $DriverMatches.Count
     return $DriverMatches
 }
 
@@ -355,6 +400,7 @@ function Install-Driver {
             $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
             
             Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
+            $Script:Stats.FilesDownloaded++
         }
         
         # Install Driver
@@ -367,8 +413,11 @@ function Install-Driver {
             
             if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) { # 3010 = Reboot required
                 Write-AutoDerivaLog "SUCCESS" "Driver installed successfully." "Green"
+                $Script:Stats.DriversInstalled++
+                if ($proc.ExitCode -eq 3010) { $Script:Stats.RebootsRequired++ }
             } else {
                 Write-AutoDerivaLog "ERROR" "Driver installation failed. Exit Code: $($proc.ExitCode)" "Red"
+                $Script:Stats.DriversFailed++
             }
         } else {
             Write-AutoDerivaLog "ERROR" "INF file not found after download: $LocalInfPath" "Red"
@@ -415,8 +464,22 @@ function Main {
         }
 
         Write-Section "Completion"
-        Write-AutoDerivaLog "DONE" "AutoDeriva process completed." "Green"
-        Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
+        $Duration = New-TimeSpan -Start $Script:Stats.StartTime -End (Get-Date)
+        Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $($Duration.ToString('hh\:mm\:ss'))." "Green"
+        
+        Write-Section "Statistics"
+        Write-AutoDerivaLog "INFO" "Hardware IDs Scanned : $($Script:Stats.DriversScanned)" "Cyan"
+        Write-AutoDerivaLog "INFO" "Drivers Matched      : $($Script:Stats.DriversMatched)" "Cyan"
+        Write-AutoDerivaLog "INFO" "Files Downloaded     : $($Script:Stats.FilesDownloaded)" "Cyan"
+        Write-AutoDerivaLog "INFO" "Drivers Installed    : $($Script:Stats.DriversInstalled)" "Green"
+        Write-AutoDerivaLog "INFO" "Drivers Failed       : $($Script:Stats.DriversFailed)" "Red"
+        if ($Script:Stats.RebootsRequired -gt 0) {
+            Write-AutoDerivaLog "WARN" "Reboots Required     : $($Script:Stats.RebootsRequired)" "Yellow"
+        }
+
+        if ($LogFilePath) {
+            Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
+        }
 
     } catch {
         Write-AutoDerivaLog "FATAL" "An unexpected error occurred: $_" "Red"
