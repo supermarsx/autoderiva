@@ -27,7 +27,7 @@ $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 Set-Location $repoRoot
 
 # Default excludes
-$excludes = @('drivers','cuco') + $ExtraExcludes
+$excludes = @('drivers', 'cuco') + $ExtraExcludes
 
 # If user provided an exclude list file, load it and merge
 if ($ExcludeListFile -and (Test-Path $ExcludeListFile)) {
@@ -83,30 +83,30 @@ Write-Host "cloc not available or disabled; using fallback PowerShell scanner." 
 
 # Extension -> language map (common languages)
 $extLang = @{
-    'ps1'   = 'PowerShell'
-    'psm1'  = 'PowerShell'
-    'py'    = 'Python'
-    'rb'    = 'Ruby'
-    'js'    = 'JavaScript'
-    'ts'    = 'TypeScript'
-    'cs'    = 'C#'
-    'cpp'   = 'C++'
-    'c'     = 'C'
-    'h'     = 'C/C++ Header'
-    'java'  = 'Java'
-    'go'    = 'Go'
-    'rs'    = 'Rust'
-    'php'   = 'PHP'
-    'html'  = 'HTML'
-    'css'   = 'CSS'
-    'json'  = 'JSON'
-    'xml'   = 'XML'
-    'md'    = 'Markdown'
-    'yml'   = 'YAML'
-    'yaml'  = 'YAML'
-    'sh'    = 'Shell'
-    'bat'   = 'Batch'
-    'psd1'  = 'PowerShell'
+    'ps1'  = 'PowerShell'
+    'psm1' = 'PowerShell'
+    'py'   = 'Python'
+    'rb'   = 'Ruby'
+    'js'   = 'JavaScript'
+    'ts'   = 'TypeScript'
+    'cs'   = 'C#'
+    'cpp'  = 'C++'
+    'c'    = 'C'
+    'h'    = 'C/C++ Header'
+    'java' = 'Java'
+    'go'   = 'Go'
+    'rs'   = 'Rust'
+    'php'  = 'PHP'
+    'html' = 'HTML'
+    'css'  = 'CSS'
+    'json' = 'JSON'
+    'xml'  = 'XML'
+    'md'   = 'Markdown'
+    'yml'  = 'YAML'
+    'yaml' = 'YAML'
+    'sh'   = 'Shell'
+    'bat'  = 'Batch'
+    'psd1' = 'PowerShell'
 }
 
 # Build a set of absolute exclude paths
@@ -139,7 +139,8 @@ foreach ($f in $allFiles) {
         if ($f.Length -lt 20MB) {
             $lines = (Get-Content -Path $f.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines
         }
-    } catch {
+    }
+    catch {
         Write-Warning "Could not read file $($f.FullName): $_"
     }
 

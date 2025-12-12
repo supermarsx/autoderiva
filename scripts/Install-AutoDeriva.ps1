@@ -21,6 +21,7 @@
     - Smart driver matching based on Hardware IDs
     - Remote file fetching (no local drivers folder required)
     - Detailed logging to file and console
+    - In-memory caching of inventory and manifest to prevent redundant downloads
 
 .EXAMPLE
     Run from PowerShell:
@@ -107,6 +108,9 @@ function Write-AutoDerivaLog {
 # 3. HELPER FUNCTIONS
 # ---------------------------------------------------------------------------
 
+# Global cache for downloaded CSVs to avoid re-fetching
+$Script:CsvCache = @{}
+
 function Invoke-DownloadFile {
     param($Url, $OutputPath)
     try {
@@ -125,13 +129,23 @@ function Invoke-DownloadFile {
 
 function Get-RemoteCsv {
     param($Url)
+    
+    # Check cache first
+    if ($Script:CsvCache.ContainsKey($Url)) {
+        Write-AutoDerivaLog "INFO" "Using cached data for: $Url" "Cyan"
+        return $Script:CsvCache[$Url]
+    }
+
     try {
         Write-AutoDerivaLog "INFO" "Fetching data from: $Url" "Cyan"
         $response = Invoke-WebRequest -Uri $Url -UseBasicParsing
         # Convert CSV content to objects
-        $content = $response.Content
-        # Handle potential encoding issues if raw text comes weird, but usually raw.github is fine
-        return $content | ConvertFrom-Csv
+        $content = $response.Content | ConvertFrom-Csv
+        
+        # Store in cache
+        $Script:CsvCache[$Url] = $content
+        
+        return $content
     }
     catch {
         Write-AutoDerivaLog "ERROR" "Failed to fetch CSV from $Url" "Red"
@@ -194,6 +208,7 @@ try {
         # 5. Fetch File Manifest
         Write-Section "File Manifest & Download"
         $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
+        # This call will cache the manifest if called multiple times (though here it's called once)
         $FileManifest = Get-RemoteCsv -Url $ManifestUrl
         
         # Group matches by INF path to avoid duplicate downloads
