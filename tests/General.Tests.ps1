@@ -1,32 +1,44 @@
-Describe "Script Validation" {
-    $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
-    $scriptsPath = Join-Path $repoRoot "scripts"
-    $scripts = Get-ChildItem -Path $scriptsPath -Filter "*.ps1"
-
-    It "Scripts directory should exist" {
-        $scriptsPath | Should -Exist
+Describe "AutoDeriva Script Validation" {
+    
+    BeforeAll {
+        $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+        $ScriptsPath = Join-Path $RepoRoot "scripts"
+        $DevScriptsPath = Join-Path $RepoRoot "dev-scripts"
     }
 
-    Context "Syntax Checks" {
-        foreach ($script in $scripts) {
-            It "$($script.Name) should have valid syntax" {
-                $content = Get-Content $script.FullName -Raw
-                $errors = $null
-                [System.Management.Automation.PSParser]::Tokenize($content, [ref]$errors) | Out-Null
-                $errors.Count | Should -Be 0
-            }
+    # Gather all .ps1 files (Run during discovery for TestCases)
+    $RepoRootDiscovery = (Resolve-Path "$PSScriptRoot\..").Path
+    $ScriptsPathDiscovery = Join-Path $RepoRootDiscovery "scripts"
+    $DevScriptsPathDiscovery = Join-Path $RepoRootDiscovery "dev-scripts"
+    
+    $AllScripts = Get-ChildItem -Path $ScriptsPathDiscovery, $DevScriptsPathDiscovery -Filter "*.ps1" -Recurse | 
+        ForEach-Object { @{ FullName = $_.FullName; Name = $_.Name } }
+
+    It "Scripts directory should exist" {
+        $ScriptsPath | Should -Exist
+    }
+
+    Context "Syntax Validation" {
+        It "<Name> should have valid PowerShell syntax" -TestCases $AllScripts {
+            param($FullName, $Name)
+            $content = Get-Content -Path $FullName -Raw
+            $errors = $null
+            $tokens = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($content, [ref]$tokens, [ref]$errors)
+            
+            $errors | Should -BeNullOrEmpty
         }
     }
 
-    Context "PSScriptAnalyzer Rules" {
-        foreach ($script in $scripts) {
-            It "$($script.Name) should pass PSScriptAnalyzer Error rules" {
-                if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
-                    $results = Invoke-ScriptAnalyzer -Path $script.FullName -Severity Error
-                    $results.Count | Should -Be 0
-                } else {
-                    Set-ItResult -Pending -Because "PSScriptAnalyzer module is not installed"
-                }
+    Context "PSScriptAnalyzer Linting" {
+        It "<Name> should pass PSScriptAnalyzer Error rules" -TestCases $AllScripts {
+            param($FullName, $Name)
+            if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
+                # We only fail on Errors for now to be safe
+                $results = Invoke-ScriptAnalyzer -Path $FullName -Severity Error
+                $results | Should -BeNullOrEmpty
+            } else {
+                Set-ItResult -Pending -Because "PSScriptAnalyzer module is not installed"
             }
         }
     }
