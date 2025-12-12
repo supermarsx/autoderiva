@@ -94,10 +94,12 @@ function Copy-CucoToDesktop {
         Copy-Item -Path $sourcePath -Destination $destPath -Force
         if (Test-Path $destPath) {
             Write-Success "CtoolGui.exe copied to Desktop successfully."
-        } else {
+        }
+        else {
             Write-ErrorLog "Failed to verify file at destination."
         }
-    } catch {
+    }
+    catch {
         Write-ErrorLog "Copy failed: $_"
     }
 }
@@ -169,15 +171,16 @@ function Install-Drivers {
                 }
 
                 $compatibleDrivers += [PSCustomObject]@{
-                    Path = $inf.FullName
-                    Name = $inf.Name
-                    Date = $date
-                    Version = $version
+                    Path      = $inf.FullName
+                    Name      = $inf.Name
+                    Date      = $date
+                    Version   = $version
                     MatchedID = $matchedId
                 }
                 # Write-Host "." -NoNewline -ForegroundColor DarkGray
             }
-        } catch {
+        }
+        catch {
             Write-WarningLog "Error reading $($inf.Name)"
         }
     }
@@ -227,11 +230,14 @@ function Install-Drivers {
         
         if ($p.ExitCode -eq 0) {
             Write-Success "Installed successfully."
-        } elseif ($p.ExitCode -eq 259) {
+        }
+        elseif ($p.ExitCode -eq 259) {
             Write-Success "Installed (Reboot required)."
-        } elseif ($p.ExitCode -eq 1) {
-             Write-WarningLog "Not needed (Newer or same version already installed)."
-        } else {
+        }
+        elseif ($p.ExitCode -eq 1) {
+            Write-WarningLog "Not needed (Newer or same version already installed)."
+        }
+        else {
             Write-ErrorLog "Failed with exit code $($p.ExitCode)."
         }
     }

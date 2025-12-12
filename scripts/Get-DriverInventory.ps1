@@ -47,17 +47,17 @@ foreach ($inf in $infFiles) {
         # Extract Hardware IDs (Simple heuristic scan)
         $hwidPattern = "(PCI|USB|ACPI|HID|HDAUDIO|BTH|DISPLAY|INTELAUDIO)\\[A-Za-z0-9_&-]+"
         $hwids = [Regex]::Matches($text, $hwidPattern, "IgnoreCase") | 
-                 ForEach-Object { $_.Value.ToUpper() } | 
-                 Select-Object -Unique
+        ForEach-Object { $_.Value.ToUpper() } | 
+        Select-Object -Unique
 
         $results += [PSCustomObject]@{
-            FileName      = $inf.Name
-            RelativePath  = $inf.FullName.Substring($repoRoot.Length + 1)
-            Class         = $class
-            Provider      = $provider
-            Date          = $date
-            Version       = $version
-            HardwareIDs   = ($hwids -join "; ")
+            FileName     = $inf.Name
+            RelativePath = $inf.FullName.Substring($repoRoot.Length + 1)
+            Class        = $class
+            Provider     = $provider
+            Date         = $date
+            Version      = $version
+            HardwareIDs  = ($hwids -join "; ")
         }
     }
     catch {
