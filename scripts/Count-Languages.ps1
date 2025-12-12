@@ -22,7 +22,7 @@ param(
     [string[]] $ExtraExcludes = @(),
     [string] $ExcludeListFile = "",
     [switch] $UseCloc = $true,
-    [string] $OutputFile = "language_summary.csv"
+    [string] $OutputFile = "exports\language_summary.csv"
 )
 
 $ErrorActionPreference = 'Stop'
