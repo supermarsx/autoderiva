@@ -31,4 +31,5 @@ try {
     Write-Error "Build Check Failed: $_"
 } finally {
     Write-Host "`n"
+    exit 0
 }

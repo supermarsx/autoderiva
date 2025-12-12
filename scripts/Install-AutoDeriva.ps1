@@ -121,10 +121,10 @@ if ($Config.EnableLogging) {
 }
 
 # TUI Colors
-$ColorHeader = "Cyan"
-$ColorText = "White"
-$ColorAccent = "Blue"
-$ColorDim = "Gray"
+$Script:ColorHeader = "Cyan"
+$Script:ColorText = "White"
+$Script:ColorAccent = "Blue"
+$Script:ColorDim = "Gray"
 
 <#
 .SYNOPSIS
@@ -133,16 +133,37 @@ $ColorDim = "Gray"
     Clears the host and prints the ASCII art logo and title.
 #>
 function Write-BrandHeader {
+    # Set Background Color
+    try {
+        $Host.UI.RawUI.BackgroundColor = "DarkBlue"
+    } catch {
+        Write-Verbose "Could not set background color."
+    }
     Clear-Host
-    Write-Host "`n"
-    Write-Host "           |           " -ForegroundColor $ColorText
-    Write-Host "       ____|____       " -ForegroundColor Yellow
-    Write-Host "      /_________\      " -ForegroundColor Yellow
-    Write-Host "   ~~~~~~~~~~~~~~~~~   " -ForegroundColor $ColorAccent
-    Write-Host "   AUTO" -NoNewline -ForegroundColor $ColorAccent
-    Write-Host "DERIVA" -ForegroundColor $ColorHeader
-    Write-Host "   System Setup & Driver Installer" -ForegroundColor $ColorDim
-    Write-Host "   " ("-" * 60) -ForegroundColor $ColorAccent
+    
+    Write-Host @'
+    
+                  |
+                 /|
+                / |
+               /  |
+              /   |
+             /    |
+            /     |
+           /      |
+          /       |
+         /________|
+         |   __   |
+     ____|__|__|__|____
+     \                /
+      \  AUTODERIVA  /
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+                                                         
+'@ -ForegroundColor $Script:ColorHeader
+    
+    Write-Host "   System Setup & Driver Installer" -ForegroundColor $Script:ColorDim
+    Write-Host "   " ("=" * 60) -ForegroundColor $Script:ColorAccent
     Write-Host "`n"
 }
 
@@ -154,8 +175,8 @@ function Write-BrandHeader {
 #>
 function Write-Section {
     param([string]$Title)
-    Write-Host "`n   [$Title]" -ForegroundColor $ColorHeader
-    Write-Host "   " ("-" * ($Title.Length + 2)) -ForegroundColor $ColorAccent
+    Write-Host "`n   [$Title]" -ForegroundColor $Script:ColorHeader
+    Write-Host "   " ("-" * ($Title.Length + 2)) -ForegroundColor $Script:ColorAccent
     if ($LogFilePath) {
         Add-Content -Path $LogFilePath -Value "`n[$Title]" -ErrorAction SilentlyContinue
     }
@@ -213,9 +234,9 @@ function Write-AutoDerivaLog {
     # Filter
     if ($MsgLevelVal -ge $ConfigLevelVal) {
         # Console Output
-        Write-Host "   [" -NoNewline -ForegroundColor $ColorDim
+        Write-Host "   [" -NoNewline -ForegroundColor $Script:ColorDim
         Write-Host "$Status" -NoNewline -ForegroundColor $Color
-        Write-Host "] $Message" -ForegroundColor $ColorText
+        Write-Host "] $Message" -ForegroundColor $Script:ColorText
         
         # File Output
         if ($LogFilePath) {
