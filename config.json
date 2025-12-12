@@ -1,0 +1,6 @@
+{
+    "BaseUrl": "https://raw.githubusercontent.com/supermarsx/autoderiva/main/",
+    "InventoryPath": "exports/driver_inventory.csv",
+    "ManifestPath": "exports/driver_file_manifest.csv",
+    "LogFile": "AutoDeriva.log"
+}

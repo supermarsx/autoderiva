@@ -1,31 +1,30 @@
 <#
 .SYNOPSIS
-    AutoDeriva System Setup & Driver Installer
+    AutoDeriva System Setup & Driver Installer (Remote/Hybrid Mode)
     
 .DESCRIPTION
     This script performs the following actions:
-    1. Copies the 'cuco' utility to the current user's Desktop.
-    2. Scans the local 'drivers' repository for drivers compatible with the current system.
-    3. Identifies the most recent version of compatible drivers from the library.
-    4. Installs/Updates the drivers using PnPUtil.
+    1. Loads configuration from config.json.
+    2. Downloads the driver inventory from the remote repository.
+    3. Scans the local system for Hardware IDs.
+    4. Matches system devices against the remote driver inventory.
+    5. If matches are found:
+       - Downloads the file manifest.
+       - Downloads all required files for the matched drivers to a temporary directory.
+       - Reconstructs the folder structure.
+       - Installs drivers using PnPUtil.
+    6. Cleans up temporary files.s
     
     Features:
     - Auto-elevation (Runs as Administrator)
     - TUI with color-coded output
     - Smart driver matching based on Hardware IDs
-    - Version/Date comparison to ensure latest drivers are used
+    - Remote file fetching (no local drivers folder required)
+    - Detailed logging to file and console
 
-    Supported School Models:
-    - Insys GW1-W149 (14" i3-10110U)
-    - HP 240 G8 Notebook PC
-    - JP-IK Leap T304 (SF20PA6W)
-    
 .EXAMPLE
     Run from PowerShell:
     .\Install-AutoDeriva.ps1
-    
-    One-line execution (if hosted):
-    irm https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1 | iex
 #>
 
 # ---------------------------------------------------------------------------
@@ -39,10 +38,29 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 $ErrorActionPreference = "Stop"
 $Script:RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$ConfigFile = Join-Path $Script:RepoRoot "config.json"
 
 # ---------------------------------------------------------------------------
-# 2. TUI HELPER FUNCTIONS (Blue Theme)
+# 2. CONFIGURATION & LOGGING
 # ---------------------------------------------------------------------------
+
+if (Test-Path $ConfigFile) {
+    $Config = Get-Content $ConfigFile | ConvertFrom-Json
+} else {
+    # Fallback defaults if config is missing (useful for standalone execution)
+    $Config = @{
+        BaseUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
+        InventoryPath = "exports/driver_inventory.csv"
+        ManifestPath = "exports/driver_file_manifest.csv"
+        LogFile = "AutoDeriva.log"
+    }
+}
+
+$LogFilePath = Join-Path $Script:RepoRoot $Config.LogFile
+# Initialize Log
+"AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
+
+# TUI Colors
 $ColorHeader = "Cyan"
 $ColorText = "White"
 $ColorAccent = "Blue"
@@ -54,13 +72,10 @@ $ColorDim = "Gray"
 function Write-BrandHeader {
     Clear-Host
     Write-Host "`n"
-    
-    # Life Raft ASCII Art
     Write-Host "           |           " -ForegroundColor $ColorText
     Write-Host "       ____|____       " -ForegroundColor $ColorWarning
     Write-Host "      /_________\      " -ForegroundColor $ColorWarning
     Write-Host "   ~~~~~~~~~~~~~~~~~   " -ForegroundColor $ColorAccent
-    
     Write-Host "   AUTO" -NoNewline -ForegroundColor $ColorAccent
     Write-Host "DERIVA" -ForegroundColor $ColorHeader
     Write-Host "   System Setup & Driver Installer" -ForegroundColor $ColorDim
@@ -72,6 +87,7 @@ function Write-Section {
     param([string]$Title)
     Write-Host "`n   [$Title]" -ForegroundColor $ColorHeader
     Write-Host "   " ("-" * ($Title.Length + 2)) -ForegroundColor $ColorAccent
+    Add-Content -Path $LogFilePath -Value "`n[$Title]"
 }
 
 function Write-Log {
@@ -80,198 +96,174 @@ function Write-Log {
         [string]$Message,
         [string]$Color = "White"
     )
-    # Format: [STATUS] Message
+    # Console Output
     Write-Host "   [" -NoNewline -ForegroundColor $ColorDim
     Write-Host "$Status" -NoNewline -ForegroundColor $Color
     Write-Host "] $Message" -ForegroundColor $ColorText
+    
+    # File Output
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $LogFilePath -Value "[$timestamp] [$Status] $Message"
 }
 
 # ---------------------------------------------------------------------------
-# 3. CORE TASKS
+# 3. HELPER FUNCTIONS
 # ---------------------------------------------------------------------------
 
-function Copy-CucoToDesktop {
-    Write-Section "Task 1: Copy Cuco Utility"
-    
-    $sourcePath = Join-Path $Script:RepoRoot "cuco\CtoolGui.exe"
-    $desktopPath = [Environment]::GetFolderPath("Desktop")
-    $destPath = Join-Path $desktopPath "CtoolGui.exe"
-
-    if (-not (Test-Path $sourcePath)) {
-        Write-Log "ERROR" "Source file not found: $sourcePath" "Red"
-        return
-    }
-
+function Invoke-DownloadFile {
+    param($Url, $OutputPath)
     try {
-        Copy-Item -Path $sourcePath -Destination $destPath -Force
-        if (Test-Path $destPath) {
-            Write-Log "DONE" "CtoolGui.exe copied to Desktop." "Green"
-        }
-        else {
-            Write-Log "FAIL" "Failed to verify file at destination." "Red"
-        }
+        $dir = Split-Path $OutputPath -Parent
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        
+        # Use Invoke-WebRequest with basic retry logic could be added here
+        Invoke-WebRequest -Uri $Url -OutFile $OutputPath -UseBasicParsing
+        return $true
     }
     catch {
-        Write-Log "FAIL" "Copy failed: $_" "Red"
+        Write-Log "ERROR" "Failed to download: $Url. Error: $_" "Red"
+        return $false
     }
 }
 
-function Install-Drivers {
-    Write-Section "Task 2: Smart Driver Installation"
-
-    $driversPath = Join-Path $Script:RepoRoot "drivers"
-    if (-not (Test-Path $driversPath)) {
-        Write-Log "ERROR" "Drivers folder not found at: $driversPath" "Red"
-        return
+function Get-RemoteCsv {
+    param($Url)
+    try {
+        Write-Log "INFO" "Fetching data from: $Url" "Cyan"
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing
+        # Convert CSV content to objects
+        $content = $response.Content
+        # Handle potential encoding issues if raw text comes weird, but usually raw.github is fine
+        return $content | ConvertFrom-Csv
     }
-
-    # A. Get System Hardware IDs
-    Write-Log "INFO" "Scanning System Hardware..." "Cyan"
-    $pnpDevices = Get-PnpDevice -PresentOnly
-    $systemHwIds = New-Object System.Collections.Generic.HashSet[string]
-    
-    foreach ($dev in $pnpDevices) {
-        if ($dev.HardwareID) {
-            foreach ($id in $dev.HardwareID) {
-                $null = $systemHwIds.Add($id.ToUpper())
-            }
-        }
+    catch {
+        Write-Log "ERROR" "Failed to fetch CSV from $Url" "Red"
+        throw $_
     }
-    Write-Log "INFO" "Found $( $systemHwIds.Count ) unique Hardware IDs." "Gray"
+}
 
-    # B. Scan Library for Compatible Drivers
-    Write-Log "INFO" "Scanning Driver Library..." "Cyan"
+# ---------------------------------------------------------------------------
+# 4. MAIN LOGIC
+# ---------------------------------------------------------------------------
+
+try {
+    Write-BrandHeader
+    Write-Log "START" "AutoDeriva Installer Initialized" "Green"
     
-    $infFiles = Get-ChildItem -Path $driversPath -Recurse -Filter "*.inf"
-    $totalFiles = $infFiles.Count
-    $compatibleDrivers = @() 
-    $hwidRegex = [Regex]"(PCI|USB|ACPI|HID|HDAUDIO|BTH|DISPLAY|INTELAUDIO)\\[A-Za-z0-9&_]+"
+    # 1. Create Temp Directory
+    $TempDir = Join-Path $env:TEMP "AutoDeriva_$(Get-Random)"
+    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+    Write-Log "INFO" "Temporary workspace: $TempDir" "Gray"
+
+    # 2. Get System Hardware IDs
+    Write-Section "Hardware Detection"
+    Write-Log "INFO" "Scanning system devices..." "Cyan"
+    $SystemDevices = Get-PnpDevice -PresentOnly
+    $SystemHardwareIds = $SystemDevices.HardwareID | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
+    Write-Log "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
+
+    # 3. Fetch Driver Inventory
+    Write-Section "Driver Inventory"
+    $InventoryUrl = $Config.BaseUrl + $Config.InventoryPath
+    $DriverInventory = Get-RemoteCsv -Url $InventoryUrl
+    Write-Log "INFO" "Loaded $( $DriverInventory.Count ) drivers from remote inventory." "Green"
+
+    # 4. Match Drivers
+    Write-Section "Driver Matching"
+    $Matches = @()
     
-    $i = 0
-    foreach ($inf in $infFiles) {
-        $i++
-        $percent = [math]::Min(100, [int](($i / $totalFiles) * 100))
-        Write-Progress -Activity "Scanning Driver Library" -Status "Processing $($inf.Name)" -PercentComplete $percent
-
-        try {
-            # Read file content (first 2000 chars usually enough for IDs to appear)
-            # Reading full content is safer but slower.
-            $content = Get-Content -Path $inf.FullName -ErrorAction SilentlyContinue
-            if (-not $content) { continue }
-            $text = $content -join "`n"
-
-            # 1. Check for HWID match
-            $matches = $hwidRegex.Matches($text)
-            $matchedId = $null
-            $isCompatible = $false
-
-            foreach ($m in $matches) {
-                if ($systemHwIds.Contains($m.Value.ToUpper())) {
-                    $isCompatible = $true
-                    $matchedId = $m.Value.ToUpper()
-                    break 
-                }
-            }
-
-            if ($isCompatible) {
-                # 2. Parse Date/Version
-                $date = [DateTime]::MinValue
-                $version = "0.0.0.0"
-                
-                if ($text -match "(?m)^\s*DriverVer\s*=\s*(.*)$") {
-                    $verStr = $matches[1].Trim().Trim('"')
-                    $parts = $verStr -split ","
-                    try { $date = [DateTime]::Parse($parts[0].Trim()) } catch {}
-                    if ($parts.Count -gt 1) { $version = $parts[1].Trim() }
-                }
-
-                $compatibleDrivers += [PSCustomObject]@{
-                    Path      = $inf.FullName
-                    Name      = $inf.Name
-                    Date      = $date
-                    Version   = $version
-                    MatchedID = $matchedId
-                }
-            }
-        }
-        catch {}
-    }
-    Write-Progress -Activity "Scanning Driver Library" -Completed
-
-    if ($compatibleDrivers.Count -eq 0) {
-        Write-Log "WARN" "No compatible drivers found in the library." "Yellow"
-        return
-    }
-
-    Write-Log "INFO" "Found $( $compatibleDrivers.Count ) compatible driver files." "Gray"
-
-    # C. Select Best Drivers
-    Write-Log "INFO" "Selecting best versions..." "Cyan"
-    
-    $bestInfs = @{} 
-    $grouped = $compatibleDrivers | Group-Object MatchedID
-    foreach ($g in $grouped) {
-        # Sort by Date Desc, then Version Desc
-        $best = $g.Group | Sort-Object Date, Version -Descending | Select-Object -First 1
-        $bestInfs[$best.Path] = $best
-    }
-
-    $finalList = $bestInfs.Values | Sort-Object Date
-    Write-Log "INFO" "Selected $( $finalList.Count ) unique driver packages to install." "Gray"
-
-    # D. Install
-    Write-Section "Installing Drivers"
-    
-    $stats = @{ Installed = 0; Skipped = 0; Failed = 0; Total = $finalList.Count }
-    $j = 0
-
-    foreach ($drv in $finalList) {
-        $j++
-        $percent = [int](($j / $stats.Total) * 100)
-        Write-Progress -Activity "Installing Drivers" -Status "Installing $($drv.Name)" -PercentComplete $percent -CurrentOperation "$j of $($stats.Total)"
-
-        $args = @("/add-driver", "`"$($drv.Path)`"", "/install")
-        $p = Start-Process -FilePath "pnputil.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru
+    foreach ($driver in $DriverInventory) {
+        # Parse HWIDs from CSV (semicolon separated)
+        $driverHwids = $driver.HardwareIDs -split ";"
         
-        if ($p.ExitCode -eq 0) {
-            Write-Log "DONE" "$($drv.Name)" "Green"
-            $stats.Installed++
-        }
-        elseif ($p.ExitCode -eq 259) {
-            Write-Log "DONE" "$($drv.Name) (Reboot Req)" "Green"
-            $stats.Installed++
-        }
-        elseif ($p.ExitCode -eq 1) {
-            Write-Log "SKIP" "$($drv.Name) (Up to date)" "Yellow"
-            $stats.Skipped++
-        }
-        else {
-            Write-Log "FAIL" "$($drv.Name) (Code $($p.ExitCode))" "Red"
-            $stats.Failed++
+        # Check for intersection
+        $intersect = $driverHwids | Where-Object { $SystemHardwareIds -contains $_.ToUpper() }
+        
+        if ($intersect) {
+            # Check if we already have a newer version for this device class/provider?
+            # For simplicity, we'll collect all matches and let PnPUtil decide or filter duplicates.
+            # A better approach is to group by Class/Provider and pick the newest Date/Version.
+            
+            $Matches += $driver
         }
     }
-    Write-Progress -Activity "Installing Drivers" -Completed
 
-    # Summary
-    Write-Section "Summary"
-    Write-Log "INFO" "Total:     $($stats.Total)" "White"
-    Write-Log "INFO" "Installed: $($stats.Installed)" "Green"
-    Write-Log "INFO" "Skipped:   $($stats.Skipped)" "Yellow"
-    Write-Log "INFO" "Failed:    $($stats.Failed)" "Red"
+    if ($Matches.Count -eq 0) {
+        Write-Log "INFO" "No compatible drivers found in the inventory." "Yellow"
+    }
+    else {
+        Write-Log "SUCCESS" "Found $( $Matches.Count ) compatible drivers." "Green"
+        
+        # 5. Fetch File Manifest
+        Write-Section "File Manifest & Download"
+        $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
+        $FileManifest = Get-RemoteCsv -Url $ManifestUrl
+        
+        # Group matches by INF path to avoid duplicate downloads
+        $UniqueInfs = $Matches | Select-Object -ExpandProperty InfPath -Unique
+        
+        $TotalFiles = 0
+        $DownloadedFiles = 0
+        
+        foreach ($infPath in $UniqueInfs) {
+            Write-Log "PROCESS" "Processing driver: $infPath" "Cyan"
+            
+            # Find all files associated with this INF in the manifest
+            # Note: AssociatedInf in manifest uses forward slashes, ensure matching format
+            $TargetInf = $infPath.Replace('\', '/')
+            $DriverFiles = $FileManifest | Where-Object { $_.AssociatedInf -eq $TargetInf }
+            
+            if (-not $DriverFiles) {
+                Write-Log "WARN" "No files found in manifest for $infPath" "Yellow"
+                continue
+            }
+            
+            foreach ($file in $DriverFiles) {
+                $remoteUrl = $Config.BaseUrl + $file.RelativePath
+                # Reconstruct path in TempDir
+                $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
+                
+                # Write-Log "DOWN" "Downloading $($file.RelativePath)..." "Gray"
+                $success = Invoke-DownloadFile -Url $remoteUrl -OutputPath $localPath
+                if ($success) { $DownloadedFiles++ }
+            }
+            
+            # 6. Install Driver
+            # The INF file is at $TempDir + $infPath
+            $LocalInfPath = Join-Path $TempDir $infPath.Replace('/', '\')
+            
+            if (Test-Path $LocalInfPath) {
+                Write-Log "INSTALL" "Installing driver..." "Cyan"
+                $installCmd = "pnputil.exe /add-driver `"$LocalInfPath`" /install"
+                $proc = Start-Process -FilePath "pnputil.exe" -ArgumentList "/add-driver `"$LocalInfPath`" /install" -NoNewWindow -Wait -PassThru
+                
+                if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) { # 3010 = Reboot required
+                    Write-Log "SUCCESS" "Driver installed successfully." "Green"
+                } else {
+                    Write-Log "ERROR" "Driver installation failed. Exit Code: $($proc.ExitCode)" "Red"
+                }
+            } else {
+                Write-Log "ERROR" "INF file not found after download: $LocalInfPath" "Red"
+            }
+        }
+    }
+
+    # 7. Cleanup
+    Write-Section "Cleanup"
+    if (Test-Path $TempDir) {
+        Remove-Item -Path $TempDir -Recurse -Force
+        Write-Log "INFO" "Temporary files removed." "Green"
+    }
+
+    Write-Section "Completion"
+    Write-Log "DONE" "AutoDeriva process completed." "Green"
+    Write-Log "INFO" "Log saved to: $LogFilePath" "Gray"
+    
+    # Pause to let user see output
+    Read-Host "Press Enter to exit..."
+
+} catch {
+    Write-Log "FATAL" "An unexpected error occurred: $_" "Red"
+    Write-Log "FATAL" $($_.ScriptStackTrace) "Red"
+    Read-Host "Press Enter to exit..."
 }
-
-# ---------------------------------------------------------------------------
-# 4. MAIN EXECUTION
-# ---------------------------------------------------------------------------
-Write-BrandHeader
-Write-Log "INFO" "Time: $(Get-Date)" "Gray"
-Write-Log "INFO" "User: $env:USERNAME" "Gray"
-Write-Log "INFO" "Repo: $Script:RepoRoot" "Gray"
-
-Copy-CucoToDesktop
-Install-Drivers
-
-Write-Section "Complete"
-Write-Log "INFO" "Please reboot your system if any drivers requested it." "Cyan"
-Write-Host "`n   Press any key to exit..." -ForegroundColor DarkGray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
