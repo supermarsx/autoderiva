@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 # Get-DriverFileManifest.ps1
-# Generates a complete list of all files in the 'drivers' directory with relative paths and sizes.
-# This allows remote scripts to reconstruct driver packages by downloading individual files.
+# Generates a complete list of all files in the 'drivers' directory with relative paths, sizes, and associated INF files.
+# This allows remote scripts to reconstruct driver packages by downloading individual files and knowing which INF they belong to.
 
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $driversPath = Join-Path $repoRoot "drivers"
@@ -17,13 +17,36 @@ if (-not (Test-Path $driversPath)) {
 $files = Get-ChildItem -Path $driversPath -Recurse -File
 
 $results = $files | ForEach-Object {
+    $file = $_
     # Calculate relative path (e.g., drivers/gw1-w149/...)
-    # We use forward slashes '/' to ensure compatibility with URL structures
-    $relPath = $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
+    $relPath = $file.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
     
+    # Find nearest .inf file by walking up the directory tree
+    $currentDir = $file.Directory
+    $associatedInf = $null
+    
+    while ($true) {
+        $infFiles = Get-ChildItem -Path $currentDir.FullName -Filter "*.inf" -File
+        if ($infFiles) {
+            # Found one or more INFs. Use the first one or join them.
+            $associatedInf = ($infFiles | ForEach-Object { $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/') }) -join ";"
+            break
+        }
+        
+        # Stop if we have reached the drivers root
+        if ($currentDir.FullName -eq $driversPath) { break }
+        
+        $currentDir = $currentDir.Parent
+        if ($null -eq $currentDir) { break }
+        
+        # Safety break if we somehow went above drivers path
+        if ($currentDir.FullName.Length -lt $driversPath.Length) { break }
+    }
+
     [PSCustomObject]@{
-        RelativePath = $relPath
-        Size         = $_.Length
+        RelativePath  = $relPath
+        Size          = $file.Length
+        AssociatedInf = $associatedInf
     }
 }
 
