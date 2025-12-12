@@ -44,6 +44,7 @@ Clear-Host
 
 $ErrorActionPreference = "Stop"
 $Script:RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$ConfigDefaultsFile = Join-Path $Script:RepoRoot "config.defaults.json"
 $ConfigFile = Join-Path $Script:RepoRoot "config.json"
 
 # ---------------------------------------------------------------------------
@@ -61,36 +62,47 @@ $DefaultConfig = @{
     CucoBinaryPath = "cuco/CtoolGui.exe"
 }
 
-# Try to load local config first
-if (Test-Path $ConfigFile) {
-    Write-Host "Loading local configuration from $ConfigFile..." -ForegroundColor Cyan
+# Initialize Config with Hardcoded Defaults
+$Config = $DefaultConfig.Clone()
+
+# 1. Load config.defaults.json (Local or Remote)
+if (Test-Path $ConfigDefaultsFile) {
+    Write-Host "Loading default configuration from $ConfigDefaultsFile..." -ForegroundColor Cyan
     try {
-        $LocalConfig = Get-Content $ConfigFile | ConvertFrom-Json
-        # Merge with defaults (simple overlay)
-        $Config = $DefaultConfig.Clone()
-        foreach ($prop in $LocalConfig.PSObject.Properties) {
+        $FileConfig = Get-Content $ConfigDefaultsFile | ConvertFrom-Json
+        foreach ($prop in $FileConfig.PSObject.Properties) {
             $Config[$prop.Name] = $prop.Value
         }
     } catch {
-        Write-Warning "Failed to parse local config. Using defaults."
-        $Config = $DefaultConfig
+        Write-Warning "Failed to parse local defaults. Using internal defaults."
     }
 } else {
-    # Try to fetch remote config
-    $RemoteConfigUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/config.json"
-    Write-Host "Local config not found. Attempting to fetch remote config from $RemoteConfigUrl..." -ForegroundColor Cyan
+    # Try to fetch remote defaults
+    $RemoteConfigUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/config.defaults.json"
+    Write-Host "Local defaults not found. Attempting to fetch remote defaults from $RemoteConfigUrl..." -ForegroundColor Cyan
     try {
         $RemoteConfigJson = Invoke-WebRequest -Uri $RemoteConfigUrl -UseBasicParsing -ErrorAction Stop
         $RemoteConfig = $RemoteConfigJson.Content | ConvertFrom-Json
         
-        $Config = $DefaultConfig.Clone()
         foreach ($prop in $RemoteConfig.PSObject.Properties) {
             $Config[$prop.Name] = $prop.Value
         }
-        Write-Host "Successfully loaded remote configuration." -ForegroundColor Green
+        Write-Host "Successfully loaded remote defaults." -ForegroundColor Green
     } catch {
-        Write-Warning "Failed to fetch remote config. Using internal defaults."
-        $Config = $DefaultConfig
+        Write-Warning "Failed to fetch remote defaults. Using internal defaults."
+    }
+}
+
+# 2. Load config.json (Local Override)
+if (Test-Path $ConfigFile) {
+    Write-Host "Loading local overrides from $ConfigFile..." -ForegroundColor Cyan
+    try {
+        $LocalConfig = Get-Content $ConfigFile | ConvertFrom-Json
+        foreach ($prop in $LocalConfig.PSObject.Properties) {
+            $Config[$prop.Name] = $prop.Value
+        }
+    } catch {
+        Write-Warning "Failed to parse local overrides."
     }
 }
 
