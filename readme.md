@@ -19,11 +19,31 @@ Run the installer directly from PowerShell with this one-liner:
 irm https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1 | iex
 ```
 
-Or download the script to execute locally:
+### Download only (save the script locally)
 
+If you just want to download the installer script (similar to using `curl`), here are a few cross-platform options:
 
+PowerShell (Windows PowerShell / PowerShell 7+):
 
-See `docs/CONFIGURATION.md` for configuration options and examples.
+```powershell
+# Windows PowerShell (use -UseBasicParsing on older PowerShell 5.1 hosts)
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1' -OutFile 'Install-AutoDeriva.ps1' -UseBasicParsing
+
+# PowerShell 7+ (pwsh) - Use native behaviour
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1' -OutFile 'Install-AutoDeriva.ps1'
+```
+
+After downloading, run the script with appropriate execution policy privileges:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Install-AutoDeriva.ps1
+# or (PowerShell 7+)
+pwsh -File ./Install-AutoDeriva.ps1
+```
+
+## 🎚️ Configuration file
+
+See `docs/configuration.md` for configuration options and examples.
 
 ## 🧭 CLI Options
 
