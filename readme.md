@@ -59,6 +59,7 @@ You can pass script-level arguments when running `Install-AutoDeriva.ps1` direct
 * `-NoDiskSpaceCheck` — Skip the pre-flight disk space check.
 * `-ShowConfig` — Print the effective configuration and exit.
 * `-DryRun` — Perform a dry run (no downloads or installs performed; useful for testing).
+* `-Help` or `-?` — Show usage/help message and exit.
 
 Example:
 

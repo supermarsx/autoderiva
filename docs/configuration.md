@@ -63,5 +63,6 @@ Many of the configuration options can also be supplied as CLI flags when invokin
 * `-NoDiskSpaceCheck` — Disable the disk space check.
 * `-ShowConfig` — Print the effective configuration to the console and exit.
 * `-DryRun` — Run in dry-run mode (no downloads or installs; useful for validation).
+* `-Help` / `-?` — Print a short usage message describing available CLI flags and exit.
 
 If you want additional fields documented or examples added here, let me know and I will extend this file.

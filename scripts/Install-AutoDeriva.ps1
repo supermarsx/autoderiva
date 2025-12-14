@@ -42,6 +42,9 @@ param(
     [switch]$DryRun
 )
 
+# Help alias (-?)
+[Alias('?')][switch]$Help
+
 # ---------------------------------------------------------------------------
 # 1. AUTO-ELEVATION
 # ---------------------------------------------------------------------------
@@ -179,6 +182,28 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('ShowConfig')) {
         Write-AutoDerivaLog "INFO" "Effective configuration:" "Cyan"
         $Config | ConvertTo-Json -Depth 5 | Write-Host
+        exit 0
+    }
+    
+    # Print help and exit if requested
+    if ($PSBoundParameters.ContainsKey('Help')) {
+        $help = @"
+Usage: Install-AutoDeriva.ps1 [options]
+
+Options:
+  -ConfigPath <path>           Path to custom `config.json` to use as overrides.
+  -EnableLogging              Enable logging (overrides config).
+  -DownloadAllFiles           Download all files from manifest.
+  -DownloadCuco               Download the Cuco utility.
+  -CucoTargetDir <path>       Target dir for Cuco (defaults to Desktop).
+  -SingleDownloadMode         Force single-threaded downloads.
+  -MaxConcurrentDownloads <n> Set max parallel downloads.
+  -NoDiskSpaceCheck           Skip pre-flight disk space check.
+  -ShowConfig                 Print the effective configuration and exit.
+  -DryRun                     Dry run (no downloads or installs).
+  -Help, -?                   Show this help message and exit.
+"@
+        Write-Host $help
         exit 0
     }
 }
