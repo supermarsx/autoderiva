@@ -5,3 +5,6 @@
 system_hardware_ids.csv
 language_summary.csv
 driver_folders.txt
+
+# Logs
+*.log

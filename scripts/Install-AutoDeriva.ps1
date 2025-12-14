@@ -49,10 +49,16 @@ param(
 # ---------------------------------------------------------------------------
 # 1. AUTO-ELEVATION
 # ---------------------------------------------------------------------------
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "Requesting administrative privileges..." -ForegroundColor Yellow
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`"" -Verb RunAs -PassThru | Out-Null
-    exit
+# During automated tests, setting the AUTODERIVA_TEST env var to '1' will skip
+# the auto-elevation behavior so tests can run non-interactively.
+if ($env:AUTODERIVA_TEST -ne '1') {
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-Host "Requesting administrative privileges..." -ForegroundColor Yellow
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`"" -Verb RunAs -PassThru | Out-Null
+        exit
+    }
+} else {
+    Write-Verbose "AUTODERIVA_TEST set - skipping auto-elevation for test environment."
 }
 
 # Set Console Colors
@@ -147,21 +153,21 @@ if ($Config.SingleDownloadMode) {
 
 # Apply CLI parameter overrides (if any)
 if ($PSBoundParameters.Count -gt 0) {
-    Write-Section "CLI Overrides"
+    Write-Host "Applying CLI overrides..." -ForegroundColor Cyan
 
     if ($PSBoundParameters.ContainsKey('ConfigPath')) {
         if (Test-Path $ConfigPath) {
             try {
                 $UserConfig = Get-Content $ConfigPath | ConvertFrom-Json
                 foreach ($prop in $UserConfig.PSObject.Properties) { $Config[$prop.Name] = $prop.Value }
-                Write-AutoDerivaLog "INFO" "Loaded configuration overrides from: $ConfigPath" "Cyan"
+                Write-Host "Loaded configuration overrides from: $ConfigPath" -ForegroundColor Cyan
             }
             catch {
-                Write-AutoDerivaLog "WARN" "Failed to parse config at $ConfigPath. Ignoring." "Yellow"
+                Write-Warning "Failed to parse config at $ConfigPath. Ignoring."
             }
         }
         else {
-            Write-AutoDerivaLog "WARN" "Config file not found at: $ConfigPath" "Yellow"
+            Write-Warning "Config file not found at: $ConfigPath"
         }
     }
 
@@ -178,12 +184,13 @@ if ($PSBoundParameters.Count -gt 0) {
     $Script:DryRun = $false
     if ($PSBoundParameters.ContainsKey('DryRun')) {
         $Script:DryRun = $true
-        Write-AutoDerivaLog "INFO" "Dry run enabled - no changes will be applied." "Yellow"
+        Write-Host "Dry run enabled - no changes will be applied." -ForegroundColor Yellow
     }
 
     if ($PSBoundParameters.ContainsKey('ShowConfig')) {
-        Write-AutoDerivaLog "INFO" "Effective configuration:" "Cyan"
-        $Config | ConvertTo-Json -Depth 5 | Write-Host
+        Write-Host "Effective configuration:" -ForegroundColor Cyan
+        # Write JSON to stdout so it can be captured by tools/tests
+        $Config | ConvertTo-Json -Depth 5 | Write-Output
         exit 0
     }
     
