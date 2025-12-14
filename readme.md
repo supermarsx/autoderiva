@@ -6,6 +6,7 @@
 ![GitHub watchers](https://img.shields.io/github/watchers/supermarsx/autoderiva?style=flat-square)
 ![Repo Size](https://img.shields.io/github/repo-size/supermarsx/autoderiva?style=flat-square)
 ![Driver Count](https://img.shields.io/badge/Drivers-163+-blue?style=flat-square)
+[![Documentation](https://img.shields.io/badge/Docs-Configuration-blue?style=flat-square)](docs/CONFIGURATION.md) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE.md)
 
 
 **AutoDeriva** is a powerful, automated system setup and driver installer designed for remote and hybrid environments. It intelligently scans your system's hardware, matches it against a remote inventory of drivers, and automatically downloads and installs the necessary components.
@@ -16,6 +17,33 @@ Run the installer directly from PowerShell with this one-liner:
 
 ```powershell
 irm https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1 | iex
+```
+
+Or download the script to execute locally:
+
+
+
+See `docs/CONFIGURATION.md` for configuration options and examples.
+
+## 🧭 CLI Options
+
+You can pass script-level arguments when running `Install-AutoDeriva.ps1` directly. Common flags:
+
+* `-ConfigPath <path>` — Path to a custom `config.json` to override defaults.
+* `-EnableLogging` — Enable logging (overrides config file setting).
+* `-DownloadAllFiles` — Download all files from the manifest (overrides config file setting).
+* `-DownloadCuco` — Enable downloading the Cuco utility.
+* `-CucoTargetDir <path>` — Override where the Cuco utility will be written (defaults to `Desktop`).
+* `-SingleDownloadMode` — Force single-threaded downloads (equivalent to setting `SingleDownloadMode: true` in the config).
+* `-MaxConcurrentDownloads <n>` — Control number of parallel downloads (overrides `MaxConcurrentDownloads`).
+* `-NoDiskSpaceCheck` — Skip the pre-flight disk space check.
+* `-ShowConfig` — Print the effective configuration and exit.
+* `-DryRun` — Perform a dry run (no downloads or installs performed; useful for testing).
+
+Example:
+
+```powershell
+.\Install-AutoDeriva.ps1 -EnableLogging -MaxConcurrentDownloads 2
 ```
 
 ## ✨ Features
@@ -59,6 +87,10 @@ The repository hosts a wide range of drivers, including but not limited to:
     *   It uses \PnPUtil\ to install the drivers into the Windows Driver Store.
 6.  **Cleanup**: Temporary files are removed after installation.
 
+## ⚙️ Configuration
+
+Configuration options are documented in `docs/CONFIGURATION.md`. The script loads defaults from `config.defaults.json` (remote or local) and applies overrides from `config.json` when present. See the docs for key descriptions, types, and examples.
+
 ## 🔧 Cuco Utility
 
 AutoDeriva can automatically download the **Cuco Utility** (\CtoolGui.exe\) to your Desktop. This behavior is configurable:
@@ -73,3 +105,7 @@ AutoDeriva can automatically download the **Cuco Utility** (\CtoolGui.exe\) to y
 *   \Get-DriverInventory.ps1\: (Dev) Generates the driver inventory CSV.
 *   \Get-DriverFileManifest.ps1\: (Dev) Generates the file manifest for the repository.
 *   \dev-scripts\: Contains build, lint, and test scripts for development.
+
+## 📄 License
+
+This project is distributed under the MIT License. See `LICENSE.md` for the full license text.

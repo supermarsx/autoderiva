@@ -27,6 +27,22 @@
 #     .\Install-AutoDeriva.ps1
 
 # ---------------------------------------------------------------------------
+# Script CLI Parameters
+# ---------------------------------------------------------------------------
+param(
+    [string]$ConfigPath,
+    [switch]$EnableLogging,
+    [switch]$DownloadAllFiles,
+    [switch]$DownloadCuco,
+    [string]$CucoTargetDir,
+    [switch]$SingleDownloadMode,
+    [int]$MaxConcurrentDownloads,
+    [switch]$NoDiskSpaceCheck,
+    [switch]$ShowConfig,
+    [switch]$DryRun
+)
+
+# ---------------------------------------------------------------------------
 # 1. AUTO-ELEVATION
 # ---------------------------------------------------------------------------
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
@@ -54,21 +70,21 @@ $ConfigFile = Join-Path $Script:RepoRoot "config.json"
 
 # Default Configuration (Fallback)
 $DefaultConfig = @{
-    BaseUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
-    InventoryPath = "exports/driver_inventory.csv"
-    ManifestPath = "exports/driver_file_manifest.csv"
-    EnableLogging = $false
-    LogLevel = "INFO"
-    DownloadAllFiles = $false
-    CucoBinaryPath = "cuco/CtoolGui.exe"
-    DownloadCuco = $true
-    CucoTargetDir = "Desktop"
-    MaxRetries = 5
-    MaxBackoffSeconds = 60
-    MinDiskSpaceMB = 3072
-    CheckDiskSpace = $true
+    BaseUrl                = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
+    InventoryPath          = "exports/driver_inventory.csv"
+    ManifestPath           = "exports/driver_file_manifest.csv"
+    EnableLogging          = $false
+    LogLevel               = "INFO"
+    DownloadAllFiles       = $false
+    CucoBinaryPath         = "cuco/CtoolGui.exe"
+    DownloadCuco           = $true
+    CucoTargetDir          = "Desktop"
+    MaxRetries             = 5
+    MaxBackoffSeconds      = 60
+    MinDiskSpaceMB         = 3072
+    CheckDiskSpace         = $true
     MaxConcurrentDownloads = 6
-    SingleDownloadMode = $false
+    SingleDownloadMode     = $false
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -82,10 +98,12 @@ if (Test-Path $ConfigDefaultsFile) {
         foreach ($prop in $FileConfig.PSObject.Properties) {
             $Config[$prop.Name] = $prop.Value
         }
-    } catch {
+    }
+    catch {
         Write-Warning "Failed to parse local defaults. Using internal defaults."
     }
-} else {
+}
+else {
     # Try to fetch remote defaults
     $RemoteConfigUrl = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/config.defaults.json"
     Write-Host "Local defaults not found. Attempting to fetch remote defaults from $RemoteConfigUrl..." -ForegroundColor Cyan
@@ -97,7 +115,8 @@ if (Test-Path $ConfigDefaultsFile) {
             $Config[$prop.Name] = $prop.Value
         }
         Write-Host "Successfully loaded remote defaults." -ForegroundColor Green
-    } catch {
+    }
+    catch {
         Write-Warning "Failed to fetch remote defaults. Using internal defaults."
     }
 }
@@ -110,7 +129,8 @@ if (Test-Path $ConfigFile) {
         foreach ($prop in $LocalConfig.PSObject.Properties) {
             $Config[$prop.Name] = $prop.Value
         }
-    } catch {
+    }
+    catch {
         Write-Warning "Failed to parse local overrides."
     }
 }
@@ -121,15 +141,57 @@ if ($Config.SingleDownloadMode) {
     $Config.MaxConcurrentDownloads = 1
 }
 
+# Apply CLI parameter overrides (if any)
+if ($PSBoundParameters.Count -gt 0) {
+    Write-Section "CLI Overrides"
+
+    if ($PSBoundParameters.ContainsKey('ConfigPath')) {
+        if (Test-Path $ConfigPath) {
+            try {
+                $UserConfig = Get-Content $ConfigPath | ConvertFrom-Json
+                foreach ($prop in $UserConfig.PSObject.Properties) { $Config[$prop.Name] = $prop.Value }
+                Write-AutoDerivaLog "INFO" "Loaded configuration overrides from: $ConfigPath" "Cyan"
+            }
+            catch {
+                Write-AutoDerivaLog "WARN" "Failed to parse config at $ConfigPath. Ignoring." "Yellow"
+            }
+        }
+        else {
+            Write-AutoDerivaLog "WARN" "Config file not found at: $ConfigPath" "Yellow"
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('EnableLogging')) { $Config.EnableLogging = $true }
+    if ($PSBoundParameters.ContainsKey('DownloadAllFiles')) { $Config.DownloadAllFiles = $true }
+    if ($PSBoundParameters.ContainsKey('DownloadCuco')) { $Config.DownloadCuco = $true }
+    if ($PSBoundParameters.ContainsKey('CucoTargetDir') -and $CucoTargetDir) { $Config.CucoTargetDir = $CucoTargetDir }
+    if ($PSBoundParameters.ContainsKey('SingleDownloadMode')) { $Config.MaxConcurrentDownloads = 1 }
+    if ($PSBoundParameters.ContainsKey('MaxConcurrentDownloads') -and $MaxConcurrentDownloads -gt 0) { $Config.MaxConcurrentDownloads = $MaxConcurrentDownloads }
+    if ($PSBoundParameters.ContainsKey('NoDiskSpaceCheck')) { $Config.CheckDiskSpace = $false }
+
+    # Dry run flag - affects installation and downloads
+    $Script:DryRun = $false
+    if ($PSBoundParameters.ContainsKey('DryRun')) {
+        $Script:DryRun = $true
+        Write-AutoDerivaLog "INFO" "Dry run enabled - no changes will be applied." "Yellow"
+    }
+
+    if ($PSBoundParameters.ContainsKey('ShowConfig')) {
+        Write-AutoDerivaLog "INFO" "Effective configuration:" "Cyan"
+        $Config | ConvertTo-Json -Depth 5 | Write-Host
+        exit 0
+    }
+}
+
 # Initialize Stats
 $Script:Stats = @{
-    StartTime = Get-Date
-    DriversScanned = 0
-    DriversMatched = 0
-    FilesDownloaded = 0
+    StartTime        = Get-Date
+    DriversScanned   = 0
+    DriversMatched   = 0
+    FilesDownloaded  = 0
     DriversInstalled = 0
-    DriversFailed = 0
-    RebootsRequired = 0
+    DriversFailed    = 0
+    RebootsRequired  = 0
 }
 
 # Initialize Log
@@ -139,11 +201,13 @@ if ($Config.EnableLogging) {
     try {
         "AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
         Write-Host "Logging enabled. Log file: $LogFilePath" -ForegroundColor Gray
-    } catch {
+    }
+    catch {
         Write-Warning "Could not write to log file at $LogFilePath. Logging to console only."
         $LogFilePath = $null
     }
-} else {
+}
+else {
     $LogFilePath = $null
 }
 
@@ -161,7 +225,8 @@ function Write-BrandHeader {
     # Set Background Color
     try {
         $Host.UI.RawUI.BackgroundColor = "Black"
-    } catch {
+    }
+    catch {
         Write-Verbose "Could not set background color."
     }
     Clear-Host
@@ -186,7 +251,8 @@ function Write-BrandHeader {
     for ($i = 0; $i -lt $Art.Count; $i++) {
         if ($i -ge 9) {
             $Color = $SeaColors[$i % $SeaColors.Count]
-        } else {
+        }
+        else {
             $Color = $Rainbow[$i % $Rainbow.Count]
         }
         Write-Host $Art[$i] -ForegroundColor $Color
@@ -239,16 +305,16 @@ function Write-AutoDerivaLog {
     # Map Status to Level
     $CurrentLevel = "INFO"
     switch ($Status) {
-        "DEBUG"   { $CurrentLevel = "DEBUG" }
-        "WARN"    { $CurrentLevel = "WARN" }
-        "ERROR"   { $CurrentLevel = "ERROR" }
-        "FATAL"   { $CurrentLevel = "FATAL" }
+        "DEBUG" { $CurrentLevel = "DEBUG" }
+        "WARN" { $CurrentLevel = "WARN" }
+        "ERROR" { $CurrentLevel = "ERROR" }
+        "FATAL" { $CurrentLevel = "FATAL" }
         "SUCCESS" { $CurrentLevel = "INFO" }
         "PROCESS" { $CurrentLevel = "INFO" }
         "INSTALL" { $CurrentLevel = "INFO" }
-        "START"   { $CurrentLevel = "INFO" }
-        "DONE"    { $CurrentLevel = "INFO" }
-        default   { $CurrentLevel = "INFO" }
+        "START" { $CurrentLevel = "INFO" }
+        "DONE" { $CurrentLevel = "INFO" }
+        default { $CurrentLevel = "INFO" }
     }
 
     $ConfigLevel = "INFO"
@@ -309,6 +375,13 @@ function Format-FileSize {
 #     Boolean. True if successful, False otherwise.
 function Invoke-DownloadFile {
     param($Url, $OutputPath, $MaxRetries = $Config.MaxRetries)
+    if ($Script:DryRun) {
+        Write-AutoDerivaLog "INFO" "DryRun: Skipping download of $Url to $OutputPath" "Gray"
+        # Ensure directory exists for downstream checks
+        $dir = Split-Path $OutputPath -Parent
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        return $true
+    }
     try {
         $dir = Split-Path $OutputPath -Parent
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
@@ -321,7 +394,8 @@ function Invoke-DownloadFile {
             try {
                 Invoke-WebRequest -Uri $Url -OutFile $OutputPath -UseBasicParsing -ErrorAction Stop
                 $success = $true
-            } catch {
+            }
+            catch {
                 $retryCount++
                 Write-AutoDerivaLog "WARN" "Download failed (Attempt $retryCount/$MaxRetries): $Url" "Yellow"
                 if ($retryCount -lt $MaxRetries) { 
@@ -369,7 +443,8 @@ function Test-DiskSpace {
         }
         Write-AutoDerivaLog "INFO" "Disk space check passed. Free: $freeReadable" "Green"
         return $true
-    } catch {
+    }
+    catch {
         Write-AutoDerivaLog "WARN" "Could not verify disk space: $_" "Yellow"
         return $true # Assume true on error to avoid blocking
     }
@@ -418,7 +493,8 @@ function Test-PreFlight {
         $response = $request.GetResponse()
         $response.Close()
         Write-AutoDerivaLog "INFO" "Internet connection verified." "Green"
-    } catch {
+    }
+    catch {
         Write-AutoDerivaLog "WARN" "Internet connection check failed. Remote downloads may fail." "Yellow"
     }
 }
@@ -433,7 +509,8 @@ function Get-SystemHardware {
     try {
         $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
         if (-not $SystemDevices) { throw "Get-PnpDevice returned no results." }
-    } catch {
+    }
+    catch {
         throw "Failed to query system devices: $_"
     }
     
@@ -544,9 +621,16 @@ function Install-Driver {
         
         if (Test-Path $LocalInfPath) {
             Write-AutoDerivaLog "INSTALL" "Installing driver..." "Cyan"
-            $proc = Start-Process -FilePath "pnputil.exe" -ArgumentList "/add-driver `"$LocalInfPath`" /install" -NoNewWindow -Wait -PassThru
+            if ($Script:DryRun) {
+                Write-AutoDerivaLog "INFO" "DryRun: Skipping installation of $LocalInfPath" "Gray"
+                $proc = @{ ExitCode = 0 }
+            }
+            else {
+                $proc = Start-Process -FilePath "pnputil.exe" -ArgumentList "/add-driver `"$LocalInfPath`" /install" -NoNewWindow -Wait -PassThru
+            }
             
-            if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) { # 3010 = Reboot required
+            if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+                # 3010 = Reboot required
                 Write-AutoDerivaLog "SUCCESS" "Driver installed successfully." "Green"
                 $Script:Stats.DriversInstalled++
                 $status = "Installed"
@@ -555,12 +639,14 @@ function Install-Driver {
                     $status = "Installed (Reboot Req)"
                 }
                 $Results += [PSCustomObject]@{ Driver = $infPath; Status = $status; Details = "Success" }
-            } else {
+            }
+            else {
                 Write-AutoDerivaLog "ERROR" "Driver installation failed. Exit Code: $($proc.ExitCode)" "Red"
                 $Script:Stats.DriversFailed++
                 $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "PnPUtil Exit Code $($proc.ExitCode)" }
             }
-        } else {
+        }
+        else {
             Write-AutoDerivaLog "ERROR" "INF file not found after download: $LocalInfPath" "Red"
             $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "INF Missing" }
         }
@@ -600,10 +686,12 @@ function Install-Cuco {
                     Write-AutoDerivaLog "INFO" "Detected user desktop: $TargetDir" "Gray"
                 }
             }
-        } catch {
+        }
+        catch {
             Write-Verbose "Could not detect original user desktop. Using: $TargetDir"
         }
-    } else {
+    }
+    else {
         # Expand environment variables if present in config path
         $TargetDir = [Environment]::ExpandEnvironmentVariables($TargetDir)
     }
@@ -611,7 +699,8 @@ function Install-Cuco {
     if (-not (Test-Path $TargetDir)) {
         try {
             New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-        } catch {
+        }
+        catch {
             Write-AutoDerivaLog "ERROR" "Failed to create target directory: $TargetDir" "Red"
             return
         }
@@ -626,10 +715,12 @@ function Install-Cuco {
         $null = Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
         if (Test-Path $CucoDest) {
             Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded successfully." "Green"
-        } else {
+        }
+        else {
             Write-AutoDerivaLog "ERROR" "Failed to verify Cuco download." "Red"
         }
-    } catch {
+    }
+    catch {
         Write-AutoDerivaLog "ERROR" "Failed to download Cuco: $_" "Red"
     }
 }
@@ -689,7 +780,8 @@ function Invoke-ConcurrentDownload {
                     $webClient = New-Object System.Net.WebClient
                     $webClient.DownloadFile($Url, $OutputPath)
                     $success = $true
-                } catch {
+                }
+                catch {
                     $retryCount++
                     if ($retryCount -lt $MaxRetries) {
                         Start-Sleep -Seconds $backoff
@@ -700,10 +792,12 @@ function Invoke-ConcurrentDownload {
             
             if ($success) { 
                 return @{ Success = $true; Url = $Url } 
-            } else { 
+            }
+            else { 
                 return @{ Success = $false; Url = $Url; Error = "Max retries exceeded" } 
             }
-        } catch {
+        }
+        catch {
             return @{ Success = $false; Url = $Url; Error = $_.ToString() }
         }
     }
@@ -713,9 +807,9 @@ function Invoke-ConcurrentDownload {
         $PS = [powershell]::Create().AddScript($ScriptBlock).AddArgument($file.Url).AddArgument($file.OutputPath).AddArgument(5)
         $PS.RunspacePool = $RunspacePool
         $Jobs += @{
-            PS = $PS
+            PS     = $PS
             Handle = $PS.BeginInvoke()
-            File = $file
+            File   = $file
         }
     }
 
@@ -736,15 +830,18 @@ function Invoke-ConcurrentDownload {
             $result = $job.PS.EndInvoke($job.Handle)
             if ($result -and $result.Success) {
                 # Success
-            } else {
+            }
+            else {
                 $failedCount++
                 $err = if ($result) { $result.Error } else { "Unknown error" }
                 Write-AutoDerivaLog "WARN" "Failed to download: $($job.File.Url) - $err" "Yellow"
             }
-        } catch {
+        }
+        catch {
             $failedCount++
             Write-AutoDerivaLog "ERROR" "Job processing error: $_" "Red"
-        } finally {
+        }
+        finally {
             $job.PS.Dispose()
         }
     }
@@ -754,7 +851,8 @@ function Invoke-ConcurrentDownload {
 
     if ($failedCount -gt 0) {
         Write-AutoDerivaLog "WARN" "$failedCount files failed to download." "Yellow"
-    } else {
+    }
+    else {
         Write-AutoDerivaLog "SUCCESS" "All files downloaded successfully." "Green"
     }
 }
@@ -835,10 +933,12 @@ function Main {
             Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
         }
 
-    } catch {
+    }
+    catch {
         Write-AutoDerivaLog "FATAL" "An unexpected error occurred: $_" "Red"
         Write-AutoDerivaLog "FATAL" $($_.ScriptStackTrace) "Red"
-    } finally {
+    }
+    finally {
         Write-Host "`n"
         Read-Host "Press Enter to close this window..."
     }
