@@ -52,6 +52,7 @@ You can pass script-level arguments when running `Install-AutoDeriva.ps1` direct
 * `-ConfigPath <path>` — Path to a custom `config.json` to override defaults.
 * `-EnableLogging` — Enable logging (overrides config file setting).
 * `-DownloadAllFiles` — Download all files from the manifest (overrides config file setting).
+* `-DownloadAllAndExit` (alias: `-DownloadOnly`) — Download all files from the manifest, then exit immediately (no installs). Useful to mirror `DownloadAllFiles` but only fetch files.
 * `-DownloadCuco` — Enable downloading the Cuco utility.
 * `-CucoTargetDir <path>` — Override where the Cuco utility will be written (defaults to `Desktop`).
 * `-SingleDownloadMode` — Force single-threaded downloads (equivalent to setting `SingleDownloadMode: true` in the config).

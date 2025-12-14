@@ -33,6 +33,7 @@ param(
     [string]$ConfigPath,
     [switch]$EnableLogging,
     [switch]$DownloadAllFiles,
+    [Alias('DownloadOnly')][switch]$DownloadAllAndExit,
     [switch]$DownloadCuco,
     [string]$CucoTargetDir,
     [switch]$SingleDownloadMode,
@@ -166,6 +167,7 @@ if ($PSBoundParameters.Count -gt 0) {
 
     if ($PSBoundParameters.ContainsKey('EnableLogging')) { $Config.EnableLogging = $true }
     if ($PSBoundParameters.ContainsKey('DownloadAllFiles')) { $Config.DownloadAllFiles = $true }
+    if ($PSBoundParameters.ContainsKey('DownloadAllAndExit')) { $Config.DownloadAllFiles = $true; $Script:ExitAfterDownloadAll = $true }
     if ($PSBoundParameters.ContainsKey('DownloadCuco')) { $Config.DownloadCuco = $true }
     if ($PSBoundParameters.ContainsKey('CucoTargetDir') -and $CucoTargetDir) { $Config.CucoTargetDir = $CucoTargetDir }
     if ($PSBoundParameters.ContainsKey('SingleDownloadMode')) { $Config.MaxConcurrentDownloads = 1 }
@@ -207,6 +209,9 @@ Options:
         exit 0
     }
 }
+
+# Ensure ExitAfterDownloadAll defaults to false
+$Script:ExitAfterDownloadAll = $false
 
 # Initialize Stats
 $Script:Stats = @{
@@ -770,6 +775,11 @@ function Invoke-DownloadAllFile {
     
     Invoke-ConcurrentDownload -FileList $FileList -MaxConcurrency $Config.MaxConcurrentDownloads
     $Script:Stats.FilesDownloaded += $FileList.Count
+    if ($Script:ExitAfterDownloadAll) {
+        Write-AutoDerivaLog "INFO" "DownloadAllAndExit flag set. Exiting after download." "Cyan"
+        Write-Progress -Id 1 -Completed
+        return
+    }
 }
 
 # .SYNOPSIS

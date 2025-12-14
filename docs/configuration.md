@@ -58,6 +58,7 @@ Many of the configuration options can also be supplied as CLI flags when invokin
 * `-ConfigPath <path>` — Load the specified JSON file as additional overrides.
 * `-EnableLogging` — Enable logging regardless of config file.
 * `-DownloadAllFiles` — Force download-all behavior.
+* `-DownloadAllAndExit` / `-DownloadOnly` — Download all files from the manifest and exit immediately; does not continue to installation.
 * `-SingleDownloadMode` — Force single-threaded downloads.
 * `-MaxConcurrentDownloads <n>` — Set the max number of concurrent downloads.
 * `-NoDiskSpaceCheck` — Disable the disk space check.
