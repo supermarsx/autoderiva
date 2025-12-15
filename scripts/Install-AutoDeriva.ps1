@@ -189,8 +189,9 @@ if ($PSBoundParameters.Count -gt 0) {
 
     if ($PSBoundParameters.ContainsKey('ShowConfig')) {
         Write-Host "Effective configuration:" -ForegroundColor Cyan
-        # Write JSON to stdout so it can be captured by tools/tests
-        $Config | ConvertTo-Json -Depth 5 | Write-Output
+        # Write JSON to stdout with a stable prefix so it can be captured reliably by tools/tests
+        $json = $Config | ConvertTo-Json -Depth 5
+        Write-Output "AUTODERIVA::CONFIG::$json"
         exit 0
     }
     
@@ -595,7 +596,11 @@ function Find-CompatibleDriver {
 # .OUTPUTS
 #     PSCustomObject[]. List of installation results.
 function Install-Driver {
-    param($DriverMatches, $TempDir)
+    param(
+        $DriverMatches,
+        $TempDir,
+        $FileManifest = $null
+    )
     
     $Results = @()
 
@@ -606,13 +611,24 @@ function Install-Driver {
 
     Write-AutoDerivaLog "SUCCESS" "Found $( $DriverMatches.Count ) compatible drivers." "Green"
     
-    # Fetch File Manifest
+    # Fetch File Manifest (allow injection for tests)
     Write-Section "File Manifest & Download"
-    $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
-    $FileManifest = Get-RemoteCsv -Url $ManifestUrl
+    if (-not $FileManifest) {
+        $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
+        $FileManifest = Get-RemoteCsv -Url $ManifestUrl
+    }
     
-    # Group matches by INF path to avoid duplicate downloads
-    $UniqueInfs = $DriverMatches | Select-Object -ExpandProperty InfPath -Unique
+    # Group matches by INF path to avoid duplicate downloads. Be defensive in case
+    # the inventory CSV is missing the expected `InfPath` property on some rows.
+    $UniqueInfs = $DriverMatches | ForEach-Object {
+        if ($_.PSObject.Properties.Name -contains 'InfPath') { $_.InfPath }
+        elseif ($_.PSObject.Properties.Name -contains 'INFPath') { $_.INFPath }
+        else {
+            # Log and mark as skipped later
+            Write-AutoDerivaLog "WARN" "Driver record missing InfPath property: $($_ | Out-String)" "Yellow"
+            $null
+        }
+    } | Where-Object { $_ } | Select-Object -Unique
     
     # 1. Collect all files to download
     $AllFilesToDownload = @()
@@ -990,6 +1006,10 @@ function Main {
 # 4. EXECUTION
 # ---------------------------------------------------------------------------
 
-Main
+if ($env:AUTODERIVA_TEST -eq '1') {
+    Write-Verbose "AUTODERIVA_TEST is set - skipping automatic Main() execution (test mode)."
+} else {
+    Main
+}
 
 
