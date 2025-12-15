@@ -260,6 +260,17 @@ $Script:ColorText = "White"
 $Script:ColorAccent = "Blue"
 $Script:ColorDim = "Gray"
 
+# Provide minimal stubs for key commands so test frameworks (Pester v5+) can Mock them
+# without failing when the real implementations are not yet loaded (or an early exit
+# prevented full dot-sourcing). These stubs are no-ops and will not override real
+# implementations if they are defined later in the file.
+if (-not (Get-Command Invoke-DownloadFile -ErrorAction SilentlyContinue)) {
+    function Invoke-DownloadFile { param($Url, $OutputPath, $MaxRetries = $Config.MaxRetries) return $false }
+}
+if (-not (Get-Command Get-RemoteCsv -ErrorAction SilentlyContinue)) {
+    function Get-RemoteCsv { param($Url) return @() }
+}
+
 # .SYNOPSIS
 #     Displays the AutoDeriva brand header.
 # .DESCRIPTION
@@ -425,6 +436,11 @@ function Invoke-DownloadFile {
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
         return $true
     }
+
+    # Test hook: allow tests to inject a custom download behavior without using Pester's Mock
+    if ($Script:Test_InvokeDownloadFile) {
+        return & $Script:Test_InvokeDownloadFile -Url $Url -OutputPath $OutputPath -MaxRetries $MaxRetries
+    }
     try {
         $dir = Split-Path $OutputPath -Parent
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
@@ -504,6 +520,11 @@ function Get-RemoteCsv {
     if ($Script:CsvCache.ContainsKey($Url)) {
         Write-AutoDerivaLog "INFO" "Using cached data for: $Url" "Cyan"
         return $Script:CsvCache[$Url]
+    }
+
+    # Test hook: allow tests to inject CSV data without performing network requests
+    if ($Script:Test_GetRemoteCsv) {
+        return & $Script:Test_GetRemoteCsv -Url $Url
     }
 
     try {
@@ -641,6 +662,9 @@ function Install-Driver {
         if ($infCandidate) { $UniqueInfs += $infCandidate } else {
             $name = if ($drv.PSObject.Properties.Name -contains 'FileName') { $drv.FileName } elseif ($drv.PSObject.Properties.Name -contains 'HardwareIDs') { $drv.HardwareIDs } else { $drv | Out-String }
             Write-AutoDerivaLog "WARN" "Driver record missing InfPath property (could not resolve): $name" "Yellow"
+            # Record skipped driver due to missing INF path so callers/tests receive a result entry
+            $Script:Stats.DriversSkipped++
+            $Results += [PSCustomObject]@{ Driver = $name; Status = "Skipped (No Inf)"; Details = "Missing InfPath" }
         }
     }
     $UniqueInfs = $UniqueInfs | Where-Object { $_ } | Select-Object -Unique
@@ -840,6 +864,11 @@ function Invoke-ConcurrentDownload {
     if ($FileList.Count -eq 0) { return }
 
     Write-AutoDerivaLog "INFO" "Starting concurrent download of $( $FileList.Count ) files..." "Cyan"
+
+    # Test hook: allow substituting the entire concurrent download implementation for tests
+    if ($Script:Test_InvokeConcurrentDownload) {
+        return & $Script:Test_InvokeConcurrentDownload -FileList $FileList -MaxConcurrency $MaxConcurrency -TestMode:$TestMode
+    }
 
     $RunspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxConcurrency)
     $RunspacePool.Open()
@@ -1052,7 +1081,10 @@ function Main {
     }
     finally {
         Write-Host "`n"
-        Read-Host "Press Enter to close this window..."
+        # Avoid interactive prompt during automated tests
+        if ($env:AUTODERIVA_TEST -ne '1') {
+            try { Read-Host "Press Enter to close this window..." } catch { }
+        }
     }
 }
 

@@ -60,12 +60,16 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
 
     It 'Counts failed file downloads in TestMode' {
         Write-Host "TEST: Counts failed file downloads in TestMode"
+        $scriptFile = Join-Path (Resolve-Path "$PSScriptRoot\..").Path 'scripts\Install-AutoDeriva.ps1'
+        $env:AUTODERIVA_TEST = '1'
+        . $scriptFile
         # Prepare two fake files
         $file1 = @{ Url = 'https://example.com/file-ok.bin'; OutputPath = Join-Path $env:TEMP 'ok.bin' }
         $file2 = @{ Url = 'https://example.com/file-fail.bin'; OutputPath = Join-Path $env:TEMP 'fail.bin' }
         $list = @($file1, $file2)
 
-        Mock Invoke-DownloadFile { param($Url, $OutputPath) if ($Url -like '*fail*') { return $false } else { return $true } }
+        # Use the script-level test hook to simulate a failing download without Pester Mock
+        $Script:Test_InvokeDownloadFile = { param($Url, $OutputPath) if ($Url -like '*fail*') { return $false } else { return $true } }
 
         $initialFailed = $Script:Stats.FilesDownloadFailed
         $initialSuccess = $Script:Stats.FilesDownloaded
@@ -78,11 +82,15 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
 
     It 'Skips drivers missing InfPath without throwing' {
         # Arrange: create a driver object missing InfPath
+        $scriptFile = Join-Path (Resolve-Path "$PSScriptRoot\..").Path 'scripts\Install-AutoDeriva.ps1'
+        $env:AUTODERIVA_TEST = '1'
+        . $scriptFile
         $driver = [PSCustomObject]@{ HardwareIDs = 'PCI\VEN_1234&DEV_ABCD'; SomeOther = 'value' }
         $drivers = @($driver)
 
-        Mock Get-RemoteCsv { @() } -Verifiable
-        Mock Invoke-ConcurrentDownload { $true } -Verifiable
+        # Use script-level test hooks to avoid depending on Pester's Mock behavior
+        $Script:Test_GetRemoteCsv = { param($Url) @() }
+        $Script:Test_InvokeConcurrentDownload = { param($FileList, $MaxConcurrency, $TestMode) return $true }
 
         $temp = Join-Path $env:TEMP ("autoderiva_test_" + (Get-Random))
         New-Item -ItemType Directory -Path $temp | Out-Null
@@ -90,8 +98,9 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
             # Call Install-Driver directly and assert skipped counter increments
             $initial = $Script:Stats.DriversSkipped
             $res = Install-Driver -DriverMatches $drivers -TempDir $temp
-            $res | Should -BeOfType System.Object
-            $Script:Stats.DriversSkipped | Should -BeGreaterThanOrEqualTo ($initial + 1)
+            # Ensure we receive a non-null/non-empty result (one or more skipped records)
+            $res | Should -Not -BeNullOrEmpty
+            ($Script:Stats.DriversSkipped -ge ($initial + 1)) | Should -BeTrue
         }
         finally {
             Remove-Item -Path $temp -Recurse -Force -ErrorAction SilentlyContinue

@@ -8,3 +8,4 @@ driver_folders.txt
 
 # Logs
 *.log
+dev-inspect-pester.ps1
