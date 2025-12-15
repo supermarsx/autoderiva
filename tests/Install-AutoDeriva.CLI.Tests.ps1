@@ -6,9 +6,9 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
     if (-not (Test-Path $scriptFile)) { throw "Script file not found at: $scriptFile" }
     . $scriptFile
 
-        It 'Prints valid JSON for -ShowConfig' -Pending {
-            Write-Host "TEST: Prints valid JSON for -ShowConfig (pending due to flakiness)"
-        }
+    It 'Prints valid JSON for -ShowConfig' -Pending {
+        Write-Host "TEST: Prints valid JSON for -ShowConfig (pending due to flakiness)"
+    }
 
     It 'Respects -MaxConcurrentDownloads override' {
         Write-Host "TEST: Respects -MaxConcurrentDownloads override"
@@ -58,22 +58,42 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config | Should -Not -BeNullOrEmpty
     }
 
+    It 'Counts failed file downloads in TestMode' {
+        Write-Host "TEST: Counts failed file downloads in TestMode"
+        # Prepare two fake files
+        $file1 = @{ Url = 'https://example.com/file-ok.bin'; OutputPath = Join-Path $env:TEMP 'ok.bin' }
+        $file2 = @{ Url = 'https://example.com/file-fail.bin'; OutputPath = Join-Path $env:TEMP 'fail.bin' }
+        $list = @($file1, $file2)
+
+        Mock Invoke-DownloadFile { param($Url, $OutputPath) if ($Url -like '*fail*') { return $false } else { return $true } }
+
+        $initialFailed = $Script:Stats.FilesDownloadFailed
+        $initialSuccess = $Script:Stats.FilesDownloaded
+
+        Invoke-ConcurrentDownload -FileList $list -TestMode
+
+        $Script:Stats.FilesDownloadFailed | Should -BeGreaterThanOrEqualTo ($initialFailed + 1)
+        $Script:Stats.FilesDownloaded | Should -BeGreaterThanOrEqualTo ($initialSuccess + 1)
+    }
+
     It 'Skips drivers missing InfPath without throwing' {
         # Arrange: create a driver object missing InfPath
         $driver = [PSCustomObject]@{ HardwareIDs = 'PCI\VEN_1234&DEV_ABCD'; SomeOther = 'value' }
         $drivers = @($driver)
 
-        # Provide an empty manifest to avoid network calls
-        $emptyManifest = @()
+        Mock Get-RemoteCsv { @() } -Verifiable
         Mock Invoke-ConcurrentDownload { $true } -Verifiable
 
         $temp = Join-Path $env:TEMP ("autoderiva_test_" + (Get-Random))
         New-Item -ItemType Directory -Path $temp | Out-Null
         try {
-            # Call Install-Driver directly while injecting a manifest to avoid remote calls
-            $res = Install-Driver -DriverMatches $drivers -TempDir $temp -FileManifest $emptyManifest
+            # Call Install-Driver directly and assert skipped counter increments
+            $initial = $Script:Stats.DriversSkipped
+            $res = Install-Driver -DriverMatches $drivers -TempDir $temp
             $res | Should -BeOfType System.Object
-        } finally {
+            $Script:Stats.DriversSkipped | Should -BeGreaterThanOrEqualTo ($initial + 1)
+        }
+        finally {
             Remove-Item -Path $temp -Recurse -Force -ErrorAction SilentlyContinue
         }
     }

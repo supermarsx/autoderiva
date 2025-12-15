@@ -57,7 +57,8 @@ if ($env:AUTODERIVA_TEST -ne '1') {
         Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`"" -Verb RunAs -PassThru | Out-Null
         exit
     }
-} else {
+}
+else {
     Write-Verbose "AUTODERIVA_TEST set - skipping auto-elevation for test environment."
 }
 
@@ -149,6 +150,7 @@ if (Test-Path $ConfigFile) {
 if ($Config.SingleDownloadMode) {
     Write-Host "Single Download Mode enabled. Forcing MaxConcurrentDownloads to 1." -ForegroundColor Yellow
     $Config.MaxConcurrentDownloads = 1
+    # Single download mode forces a single concurrent worker; do not exit here
 }
 
 # Apply CLI parameter overrides (if any)
@@ -227,6 +229,9 @@ $Script:Stats = @{
     DriversScanned   = 0
     DriversMatched   = 0
     FilesDownloaded  = 0
+    FilesDownloadFailed = 0
+    DriversSkipped = 0
+    DriversAlreadyPresent = 0
     DriversInstalled = 0
     DriversFailed    = 0
     RebootsRequired  = 0
@@ -650,6 +655,7 @@ function Install-Driver {
         
         if (-not $DriverFiles) {
             Write-AutoDerivaLog "WARN" "No files found in manifest for $infPath" "Yellow"
+            $Script:Stats.DriversSkipped++
             $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Skipped (No Files)"; Details = "Manifest missing files" }
             continue
         }
@@ -666,7 +672,6 @@ function Install-Driver {
     # 2. Download concurrently
     if ($AllFilesToDownload.Count -gt 0) {
         Invoke-ConcurrentDownload -FileList $AllFilesToDownload -MaxConcurrency $Config.MaxConcurrentDownloads
-        $Script:Stats.FilesDownloaded += $AllFilesToDownload.Count
     }
     
     # 3. Install Drivers
@@ -692,11 +697,19 @@ function Install-Driver {
                 $proc = Start-Process -FilePath "pnputil.exe" -ArgumentList "/add-driver `"$LocalInfPath`" /install" -NoNewWindow -Wait -PassThru
             }
             
-            if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
-                # 3010 = Reboot required
-                Write-AutoDerivaLog "SUCCESS" "Driver installed successfully." "Green"
-                $Script:Stats.DriversInstalled++
-                $status = "Installed"
+            if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 259) {
+                # 3010 = Reboot required, 259 = Already present / no action
+                if ($proc.ExitCode -eq 259) {
+                    Write-AutoDerivaLog "INFO" "Driver already present or no action needed (Exit Code 259)." "Yellow"
+                    $status = "Installed (Already Present)"
+                    $Script:Stats.DriversAlreadyPresent++
+                    $Script:Stats.DriversInstalled++
+                }
+                else {
+                    Write-AutoDerivaLog "SUCCESS" "Driver installed successfully." "Green"
+                    $Script:Stats.DriversInstalled++
+                    $status = "Installed"
+                }
                 if ($proc.ExitCode -eq 3010) { 
                     $Script:Stats.RebootsRequired++ 
                     $status = "Installed (Reboot Req)"
@@ -822,7 +835,7 @@ function Invoke-DownloadAllFile {
 # .PARAMETER MaxConcurrency
 #     Maximum number of concurrent downloads.
 function Invoke-ConcurrentDownload {
-    param($FileList, $MaxConcurrency = 6)
+    param($FileList, $MaxConcurrency = 6, [switch]$TestMode)
 
     if ($FileList.Count -eq 0) { return }
 
@@ -891,49 +904,80 @@ function Invoke-ConcurrentDownload {
     }
     Write-Progress -Activity "Downloading Files (Concurrent)" -Completed
 
-    # Process results
     $failedCount = 0
-    foreach ($job in $Jobs) {
-        try {
-            $result = $job.PS.EndInvoke($job.Handle)
-            if ($result -and $result.Success) {
-                # Success
-            }
-            else {
-                $failedCount++
-                $err = if ($result) { $result.Error } else { "Unknown error" }
-                Write-AutoDerivaLog "WARN" "Failed to download: $($job.File.Url) - $err" "Yellow"
-            }
-        }
-        catch {
-            $failedCount++
-            Write-AutoDerivaLog "ERROR" "Job processing error: $_" "Red"
-        }
-        finally {
-            $job.PS.Dispose()
-        }
-    }
-    
-    $RunspacePool.Close()
-    $RunspacePool.Dispose()
+    $total = $FileList.Count
 
-    if ($failedCount -gt 0) {
-        Write-AutoDerivaLog "WARN" "$failedCount files failed to download." "Yellow"
+    if ($TestMode) {
+        # Run sequentially in-process for deterministic testing/mocking
+        $completed = 0
+        foreach ($file in $FileList) {
+            $ok = Invoke-DownloadFile -Url $file.Url -OutputPath $file.OutputPath
+            if (-not $ok) {
+                $failedCount++
+                Write-AutoDerivaLog "WARN" "Failed to download: $($file.Url)" "Yellow"
+            }
+            $completed++
+            $percent = [math]::Min(100, [int](($completed / $total) * 100))
+            Write-Progress -Activity "Downloading Files (TestMode)" -Status "$completed / $total files" -PercentComplete $percent
+        }
+        Write-Progress -Activity "Downloading Files (TestMode)" -Status "Completed" -PercentComplete 100 -Completed
     }
     else {
-        Write-AutoDerivaLog "SUCCESS" "All files downloaded successfully." "Green"
-    }
-}
+        $Jobs = @()
+        foreach ($file in $FileList) {
+            $PS = [powershell]::Create().AddScript($ScriptBlock).AddArgument($file.Url).AddArgument($file.OutputPath).AddArgument(5)
+            $PS.RunspacePool = $RunspacePool
+            $Jobs += @{
+                PS     = $PS
+                Handle = $PS.BeginInvoke()
+                File   = $file
+            }
+        }
 
-# .SYNOPSIS
-#     Main execution function.
+        # Wait for completion
+        while (($Jobs | Where-Object { $_.Handle.IsCompleted }).Count -lt $total) {
+            $completed = ($Jobs | Where-Object { $_.Handle.IsCompleted }).Count
+            $percent = [math]::Min(100, [int](($completed / $total) * 100))
+            Write-Progress -Activity "Downloading Files (Concurrent)" -Status "$completed / $total files" -PercentComplete $percent
+            Start-Sleep -Milliseconds 200
+        }
+        Write-Progress -Activity "Downloading Files (Concurrent)" -Status "Completed" -PercentComplete 100 -Completed
+
+        foreach ($job in $Jobs) {
+            try {
+                $result = $job.PS.EndInvoke($job.Handle)
+                if ($result -and $result.Success) {
+                    # Success
+                }
+                else {
+                    $failedCount++
+                    $err = if ($result) { $result.Error } else { "Unknown error" }
+                    Write-AutoDerivaLog "WARN" "Failed to download: $($job.File.Url) - $err" "Yellow"
+                }
+            }
+            catch {
+                $failedCount++
+                Write-AutoDerivaLog "ERROR" "Job processing error: $_" "Red"
+            }
+            finally {
+                $job.PS.Dispose()
+            }
+        }
+    }
+
+    # Update global stats
+    if ($total -gt 0) {
+        $Script:Stats.FilesDownloadFailed += $failedCount
+        $Script:Stats.FilesDownloaded += ($total - $failedCount)
+    }
+
+    } # end function Invoke-ConcurrentDownload
+
+# ---------------------------------------------------------------------------
+# 3b. MAIN - Execution Entry Point
+# ---------------------------------------------------------------------------
 function Main {
     try {
-        Write-BrandHeader
-        Write-AutoDerivaLog "START" "AutoDeriva Installer Initialized" "Green"
-        
-        Test-PreFlight
-
         # Install Cuco
         Install-Cuco
 
@@ -1018,7 +1062,8 @@ function Main {
 
 if ($env:AUTODERIVA_TEST -eq '1') {
     Write-Verbose "AUTODERIVA_TEST is set - skipping automatic Main() execution (test mode)."
-} else {
+}
+else {
     Main
 }
 
