@@ -596,39 +596,49 @@ function Find-CompatibleDriver {
 # .OUTPUTS
 #     PSCustomObject[]. List of installation results.
 function Install-Driver {
-    param(
-        $DriverMatches,
-        $TempDir,
-        $FileManifest = $null
-    )
+    param($DriverMatches, $TempDir)
     
     $Results = @()
 
-    if ($DriverMatches.Count -eq 0) {
+    $driverCount = 0
+    if ($DriverMatches) { $driverCount = $DriverMatches.Count }
+    if ($driverCount -eq 0) {
         Write-AutoDerivaLog "INFO" "No compatible drivers found in the inventory." "Yellow"
         return $Results
     }
 
-    Write-AutoDerivaLog "SUCCESS" "Found $( $DriverMatches.Count ) compatible drivers." "Green"
+    Write-AutoDerivaLog "SUCCESS" "Found $driverCount compatible drivers." "Green"
     
-    # Fetch File Manifest (allow injection for tests)
+    # Fetch File Manifest
     Write-Section "File Manifest & Download"
-    if (-not $FileManifest) {
-        $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
-        $FileManifest = Get-RemoteCsv -Url $ManifestUrl
-    }
+    $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
+    $FileManifest = Get-RemoteCsv -Url $ManifestUrl
     
     # Group matches by INF path to avoid duplicate downloads. Be defensive in case
     # the inventory CSV is missing the expected `InfPath` property on some rows.
-    $UniqueInfs = $DriverMatches | ForEach-Object {
-        if ($_.PSObject.Properties.Name -contains 'InfPath') { $_.InfPath }
-        elseif ($_.PSObject.Properties.Name -contains 'INFPath') { $_.INFPath }
-        else {
-            # Log and mark as skipped later
-            Write-AutoDerivaLog "WARN" "Driver record missing InfPath property: $($_ | Out-String)" "Yellow"
-            $null
+    $UniqueInfs = @()
+    foreach ($drv in $DriverMatches) {
+        $infCandidate = $null
+        if ($drv.PSObject.Properties.Name -contains 'InfPath' -and $drv.InfPath) {
+            $infCandidate = $drv.InfPath
         }
-    } | Where-Object { $_ } | Select-Object -Unique
+        elseif ($drv.PSObject.Properties.Name -contains 'INFPath' -and $drv.INFPath) {
+            $infCandidate = $drv.INFPath
+        }
+        elseif ($drv.PSObject.Properties.Name -contains 'FileName' -and $drv.FileName) {
+            # Try to resolve the INF path using the file manifest (best-effort)
+            $match = $FileManifest | Where-Object { $_.FileName -eq $drv.FileName } | Select-Object -First 1
+            if ($match) {
+                # Prefer an AssociatedInf mapping if available, otherwise use the relative path of the INF itself
+                if ($match.AssociatedInf) { $infCandidate = $match.AssociatedInf } else { $infCandidate = $match.RelativePath }
+            }
+        }
+        if ($infCandidate) { $UniqueInfs += $infCandidate } else {
+            $name = if ($drv.PSObject.Properties.Name -contains 'FileName') { $drv.FileName } elseif ($drv.PSObject.Properties.Name -contains 'HardwareIDs') { $drv.HardwareIDs } else { $drv | Out-String }
+            Write-AutoDerivaLog "WARN" "Driver record missing InfPath property (could not resolve): $name" "Yellow"
+        }
+    }
+    $UniqueInfs = $UniqueInfs | Where-Object { $_ } | Select-Object -Unique
     
     # 1. Collect all files to download
     $AllFilesToDownload = @()
@@ -704,7 +714,7 @@ function Install-Driver {
             $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "INF Missing" }
         }
     }
-    Write-Progress -Id 1 -Completed
+    Write-Progress -Id 1 -Activity "Installing Drivers" -Status "Completed" -PercentComplete 100 -Completed
     return $Results
 }
 
