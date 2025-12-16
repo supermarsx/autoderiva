@@ -74,6 +74,7 @@ if ($env:AUTODERIVA_TEST -ne '1') {
     }
     catch {
         # Non-fatal: some hosts (VS Code, non-interactive) may not allow RawUI operations.
+        Write-Verbose "RawUI/Clear-Host not supported in this host: $_"
     }
 }
 
@@ -379,10 +380,20 @@ $Script:ColorDim = "Gray"
 # prevented full dot-sourcing). These stubs are no-ops and will not override real
 # implementations if they are defined later in the file.
 if (-not (Get-Command Invoke-DownloadFile -ErrorAction SilentlyContinue)) {
-    function Invoke-DownloadFile { param($Url, $OutputPath, $MaxRetries = $Config.MaxRetries) return $false }
+    function Invoke-DownloadFile {
+        param($Url, $OutputPath, $MaxRetries = $Config.MaxRetries)
+        $null = $Url
+        $null = $OutputPath
+        $null = $MaxRetries
+        return $false
+    }
 }
 if (-not (Get-Command Get-RemoteCsv -ErrorAction SilentlyContinue)) {
-    function Get-RemoteCsv { param($Url) return @() }
+    function Get-RemoteCsv {
+        param($Url)
+        $null = $Url
+        return @()
+    }
 }
 
 # .SYNOPSIS
@@ -1112,8 +1123,8 @@ function Invoke-ConcurrentDownload {
     }
     finally {
         if ($RunspacePool) {
-            try { $RunspacePool.Close() } catch { }
-            try { $RunspacePool.Dispose() } catch { }
+            try { $RunspacePool.Close() } catch { Write-Verbose "Failed to close RunspacePool: $_" }
+            try { $RunspacePool.Dispose() } catch { Write-Verbose "Failed to dispose RunspacePool: $_" }
         }
     }
 
@@ -1220,7 +1231,7 @@ function Main {
         Write-Host "`n"
         # Avoid interactive prompt during automated tests
         if ($env:AUTODERIVA_TEST -ne '1') {
-            try { Read-Host "Press Enter to close this window..." } catch { }
+            try { Read-Host "Press Enter to close this window..." } catch { Write-Verbose "Read-Host failed: $_" }
         }
     }
 }

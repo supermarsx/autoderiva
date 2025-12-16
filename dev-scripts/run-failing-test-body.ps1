@@ -8,7 +8,7 @@ $file2 = @{ Url = 'https://example.com/file-fail.bin'; OutputPath = Join-Path $e
 $list = @($file1, $file2)
 
 # Test hook to simulate failing download
-$Script:Test_InvokeDownloadFile = { param($Url, $OutputPath) if ($Url -like '*fail*') { return $false } else { return $true } }
+$Script:Test_InvokeDownloadFile = { param($Url, $OutputPath) $null = $OutputPath; if ($Url -like '*fail*') { return $false } else { return $true } }
 
 $initialFailed = $Script:Stats.FilesDownloadFailed
 $initialSuccess = $Script:Stats.FilesDownloaded
