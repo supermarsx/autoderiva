@@ -33,6 +33,9 @@ param(
     [string]$ConfigPath,
     [switch]$EnableLogging,
     [switch]$CleanLogs,
+    [int]$LogRetentionDays,
+    [int]$MaxLogFiles,
+    [switch]$NoLogCleanup,
     [switch]$DownloadAllFiles,
     [Alias('DownloadOnly')][switch]$DownloadAllAndExit,
     [switch]$DownloadCuco,
@@ -61,10 +64,17 @@ else {
     Write-Verbose "AUTODERIVA_TEST set - skipping auto-elevation for test environment."
 }
 
-# Set Console Colors
-$Host.UI.RawUI.BackgroundColor = "DarkBlue"
-$Host.UI.RawUI.ForegroundColor = "White"
-Clear-Host
+# Set Console Colors / clear screen (skip during tests to avoid VS Code hangs/flaky terminal behavior)
+if ($env:AUTODERIVA_TEST -ne '1') {
+    try {
+        $Host.UI.RawUI.BackgroundColor = "DarkBlue"
+        $Host.UI.RawUI.ForegroundColor = "White"
+        Clear-Host
+    }
+    catch {
+        # Non-fatal: some hosts (VS Code, non-interactive) may not allow RawUI operations.
+    }
+}
 
 # Ensure TLS 1.2 is enabled for web requests (Crucial for GitHub and modern APIs on older PS/Windows)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -85,6 +95,9 @@ $DefaultConfig = @{
     ManifestPath           = "exports/driver_file_manifest.csv"
     EnableLogging          = $false
     LogLevel               = "INFO"
+    AutoCleanupLogs         = $true
+    LogRetentionDays        = 10
+    MaxLogFiles             = 15
     DownloadAllFiles       = $false
     CucoBinaryPath         = "cuco/CtoolGui.exe"
     DownloadCuco           = $true
@@ -173,6 +186,9 @@ if ($PSBoundParameters.Count -gt 0) {
     }
 
     if ($PSBoundParameters.ContainsKey('EnableLogging')) { $Config.EnableLogging = $true }
+    if ($PSBoundParameters.ContainsKey('NoLogCleanup')) { $Config.AutoCleanupLogs = $false }
+    if ($PSBoundParameters.ContainsKey('LogRetentionDays') -and $LogRetentionDays -ge 0) { $Config.LogRetentionDays = $LogRetentionDays }
+    if ($PSBoundParameters.ContainsKey('MaxLogFiles') -and $MaxLogFiles -ge 0) { $Config.MaxLogFiles = $MaxLogFiles }
     if ($PSBoundParameters.ContainsKey('DownloadAllFiles')) { $Config.DownloadAllFiles = $true }
     if ($PSBoundParameters.ContainsKey('DownloadAllAndExit')) { $Config.DownloadAllFiles = $true; $Script:ExitAfterDownloadAll = $true }
     if ($PSBoundParameters.ContainsKey('DownloadCuco')) { $Config.DownloadCuco = $true }
@@ -204,7 +220,10 @@ Usage: Install-AutoDeriva.ps1 [options]
 Options:
   -ConfigPath <path>           Path to custom `config.json` to use as overrides.
   -EnableLogging              Enable logging (overrides config).
-    -CleanLogs                  Delete existing autoderiva-*.log files in the repo root.
+    -CleanLogs                  Delete ALL autoderiva-*.log files in the repo root.
+    -LogRetentionDays <n>       Auto-delete logs older than <n> days (default: 10).
+    -MaxLogFiles <n>            Keep only the newest <n> logs (default: 15).
+    -NoLogCleanup               Disable automatic log cleanup (retention/max-files).
   -DownloadAllFiles           Download all files from manifest.
   -DownloadCuco               Download the Cuco utility.
   -CucoTargetDir <path>       Target dir for Cuco (defaults to Desktop).
@@ -237,21 +256,66 @@ $Script:Stats = @{
     RebootsRequired       = 0
 }
 
-# Optional log cleanup (before creating a new log file)
+function Invoke-AutoDerivaLogCleanup {
+    param(
+        [Parameter(Mandatory = $true)][string]$RootPath,
+        [int]$RetentionDays,
+        [int]$MaxFiles,
+        [switch]$ForceAll
+    )
+
+    $pattern = 'autoderiva-*.log'
+    $logs = @(Get-ChildItem -Path $RootPath -Filter $pattern -File -ErrorAction SilentlyContinue)
+    if ($logs.Count -eq 0) { return }
+
+    if ($ForceAll) {
+        $logs | Remove-Item -Force -ErrorAction SilentlyContinue
+        return
+    }
+
+    # Age-based cleanup (0 or negative disables)
+    if ($RetentionDays -gt 0) {
+        $cutoff = (Get-Date).AddDays(-$RetentionDays)
+        $old = $logs | Where-Object { $_.LastWriteTime -lt $cutoff }
+        if ($old.Count -gt 0) {
+            $old | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # Count-based cleanup (0 or negative disables)
+    if ($MaxFiles -gt 0) {
+        $remaining = @(Get-ChildItem -Path $RootPath -Filter $pattern -File -ErrorAction SilentlyContinue |
+            Sort-Object -Property LastWriteTime -Descending)
+
+        if ($remaining.Count -gt $MaxFiles) {
+            $toDelete = $remaining | Select-Object -Skip $MaxFiles
+            $toDelete | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# In test mode, default to no file logging (and avoid cleanup) unless explicitly forced.
+if ($env:AUTODERIVA_TEST -eq '1' -and -not $PSBoundParameters.ContainsKey('EnableLogging')) {
+    $Config.EnableLogging = $false
+}
+
+# Log cleanup/retention (before creating a new log file)
 if ($PSBoundParameters.ContainsKey('CleanLogs')) {
     try {
-        Get-ChildItem -Path $Script:RepoRoot -Filter 'autoderiva-*.log' -File -ErrorAction SilentlyContinue |
-            Remove-Item -Force -ErrorAction SilentlyContinue
+        Invoke-AutoDerivaLogCleanup -RootPath $Script:RepoRoot -ForceAll
         Write-Host "Cleaned existing AutoDeriva logs (autoderiva-*.log)." -ForegroundColor Gray
     }
     catch {
         Write-Warning "Failed to clean existing logs: $_"
     }
 }
-
-# In test mode, default to no file logging unless explicitly forced.
-if ($env:AUTODERIVA_TEST -eq '1' -and -not $PSBoundParameters.ContainsKey('EnableLogging')) {
-    $Config.EnableLogging = $false
+elseif ($Config.EnableLogging -and $Config.AutoCleanupLogs -and $env:AUTODERIVA_TEST -ne '1') {
+    try {
+        Invoke-AutoDerivaLogCleanup -RootPath $Script:RepoRoot -RetentionDays $Config.LogRetentionDays -MaxFiles $Config.MaxLogFiles
+    }
+    catch {
+        Write-Warning "Log cleanup failed: $_"
+    }
 }
 
 # Initialize Log

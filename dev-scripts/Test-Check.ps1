@@ -22,6 +22,13 @@ Write-Host "Running Pester Tests..." -ForegroundColor Cyan
 
 $config = [PesterConfiguration]::Default
 $config.Run.Path = $testsPath
-$config.Output.Verbosity = "Detailed"
+
+# Default to Normal verbosity to reduce output volume (helps VS Code not hang).
+# Override by setting AUTODERIVA_PESTER_VERBOSE=Detailed|Diagnostic|Normal
+$verbosity = $env:AUTODERIVA_PESTER_VERBOSE
+if ([string]::IsNullOrWhiteSpace($verbosity)) {
+    $verbosity = "Normal"
+}
+$config.Output.Verbosity = $verbosity
 
 Invoke-Pester -Configuration $config
