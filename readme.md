@@ -6,7 +6,7 @@
 ![GitHub watchers](https://img.shields.io/github/watchers/supermarsx/autoderiva?style=flat-square)
 ![Repo Size](https://img.shields.io/github/repo-size/supermarsx/autoderiva?style=flat-square)
 ![Driver Count](https://img.shields.io/badge/Drivers-163+-blue?style=flat-square)
-[![Documentation](https://img.shields.io/badge/Docs-Configuration-blue?style=flat-square)](docs/CONFIGURATION.md) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE.md)
+[![Documentation](https://img.shields.io/badge/Docs-Configuration-blue?style=flat-square)](docs/configuration.md) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE.md)
 
 
 **AutoDeriva** is a powerful, automated system setup and driver installer designed for remote and hybrid environments. It intelligently scans your system's hardware, matches it against a remote inventory of drivers, and automatically downloads and installs the necessary components.
@@ -51,9 +51,14 @@ You can pass script-level arguments when running `Install-AutoDeriva.ps1` direct
 
 * `-ConfigPath <path>` — Path to a custom `config.json` to override defaults.
 * `-EnableLogging` — Enable logging (overrides config file setting).
+* `-CleanLogs` — Delete all `autoderiva-*.log` files in the `logs/` folder.
+* `-LogRetentionDays <n>` — Auto-delete logs older than `<n>` days (overrides config).
+* `-MaxLogFiles <n>` — Keep only the newest `<n>` logs (overrides config).
+* `-NoLogCleanup` — Disable automatic log cleanup (retention/max-files).
 * `-DownloadAllFiles` — Download all files from the manifest (overrides config file setting).
 * `-DownloadAllAndExit` (alias: `-DownloadOnly`) — Download all files from the manifest, then exit immediately (no installs). Useful to mirror `DownloadAllFiles` but only fetch files.
 * `-DownloadCuco` — Enable downloading the Cuco utility.
+* `-DownloadCucoAndExit` (alias: `-CucoOnly`) — Download Cuco only, print stats, then exit.
 * `-CucoTargetDir <path>` — Override where the Cuco utility will be written (defaults to `Desktop`).
 * `-SingleDownloadMode` — Force single-threaded downloads (equivalent to setting `SingleDownloadMode: true` in the config).
 * `-MaxConcurrentDownloads <n>` — Control number of parallel downloads (overrides `MaxConcurrentDownloads`).
@@ -75,7 +80,8 @@ Example:
 *   **Auto-Elevation**: Automatically requests administrative privileges to ensure seamless installation.
 *   **Resilient Downloads**: Includes retry logic and exponential backoff for reliable file fetching.
 *   **Disk Space Checks**: Verifies sufficient disk space before starting downloads.
-*   **Detailed Logging**: Keeps a comprehensive log of all actions for troubleshooting.
+*   **Detailed Logging**: Keeps a comprehensive log of all actions for troubleshooting (stored under `logs/`).
+*   **Log Retention**: Optional automatic cleanup of old logs by age and max file count.
 *   **Cuco Utility Integration**: Optionally downloads the Cuco utility (\CtoolGui.exe\) to the user's desktop.
 *   **Beautiful TUI**: Features a colorful, text-based user interface with progress bars and ASCII art.
 
@@ -112,6 +118,8 @@ The repository hosts a wide range of drivers, including but not limited to:
 ## ⚙️ Configuration
 
 Configuration options are documented in `docs/CONFIGURATION.md`. The script loads defaults from `config.defaults.json` (remote or local) and applies overrides from `config.json` when present. See the docs for key descriptions, types, and examples.
+
+Note: log files are written to the `logs/` folder (gitignored). Cleanup behavior is controlled via `AutoCleanupLogs`, `LogRetentionDays`, and `MaxLogFiles`.
 
 ## 🔧 Cuco Utility
 

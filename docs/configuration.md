@@ -27,8 +27,11 @@ Configuration keys
 | `BaseUrl` | string | `https://raw.githubusercontent.com/supermarsx/autoderiva/main/` | Base URL used to fetch manifests and driver files. Change this to point to a different host if needed. |
 | `InventoryPath` | string | `exports/driver_inventory.csv` | Path (relative to `BaseUrl`) to the driver inventory CSV. |
 | `ManifestPath` | string | `exports/driver_file_manifest.csv` | Path (relative to `BaseUrl`) to the file manifest CSV. |
-| `EnableLogging` | boolean | `true` | Enable writing a runtime log file. The log file is generated in the repository root if enabled. |
+| `EnableLogging` | boolean | `true` | Enable writing a runtime log file. Log files are written under `logs/` when enabled. |
 | `LogLevel` | string | `INFO` | The logging verbosity. Supported values: `DEBUG`, `INFO`, `WARN`, `ERROR`. |
+| `AutoCleanupLogs` | boolean | `true` | If `true`, automatically deletes old log files using the retention rules below. |
+| `LogRetentionDays` | integer | `10` | Delete log files older than this many days. Set to `0` to disable age-based cleanup. |
+| `MaxLogFiles` | integer | `15` | Keep at most this many log files (newest kept). Set to `0` to disable count-based cleanup. |
 | `DownloadAllFiles` | boolean | `false` | If `true`, downloads *all* files from the manifest (useful for offline scenarios). |
 | `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Relative path (from `BaseUrl`) to the Cuco utility binary. |
 | `DownloadCuco` | boolean | `true` | If `true`, the Cuco utility is downloaded to the target directory. |
@@ -49,7 +52,8 @@ Notes & behavior
 Troubleshooting tips
 
 - If downloads fail due to connection issues or throttling, try reducing `MaxConcurrentDownloads` or enable `SingleDownloadMode`.
-- When enabling logging, inspect the generated log file (`autoderiva-<timestamp>.log`) in the repository root for detailed error messages.
+- When enabling logging, inspect `logs/autoderiva-<timestamp>.log` for detailed error messages.
+- If you see too many logs accumulate, adjust `LogRetentionDays` and/or `MaxLogFiles`, or disable cleanup entirely with `AutoCleanupLogs: false`.
 
 CLI Overrides
 
@@ -57,10 +61,15 @@ Many of the configuration options can also be supplied as CLI flags when invokin
 
 * `-ConfigPath <path>` — Load the specified JSON file as additional overrides.
 * `-EnableLogging` — Enable logging regardless of config file.
+* `-CleanLogs` — Delete all `autoderiva-*.log` files in the `logs/` folder.
+* `-LogRetentionDays <n>` — Override `LogRetentionDays`.
+* `-MaxLogFiles <n>` — Override `MaxLogFiles`.
+* `-NoLogCleanup` — Disable automatic log cleanup regardless of config.
 * `-DownloadAllFiles` — Force download-all behavior.
 * `-DownloadAllAndExit` / `-DownloadOnly` — Download all files from the manifest and exit immediately; does not continue to installation.
 * `-SingleDownloadMode` — Force single-threaded downloads.
 * `-MaxConcurrentDownloads <n>` — Set the max number of concurrent downloads.
+* `-DownloadCucoAndExit` / `-CucoOnly` — Download Cuco only, then exit.
 * `-NoDiskSpaceCheck` — Disable the disk space check.
 * `-ShowConfig` — Print the effective configuration to the console and exit.
 * `-DryRun` — Run in dry-run mode (no downloads or installs; useful for validation).
