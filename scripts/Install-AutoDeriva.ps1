@@ -214,7 +214,7 @@ if ($PSBoundParameters.Count -gt 0) {
     
     # Print help and exit if requested
     if ($PSBoundParameters.ContainsKey('Help')) {
-        $help = @"
+        $helpText = @"
 Usage: Install-AutoDeriva.ps1 [options]
 
 Options:
@@ -234,7 +234,7 @@ Options:
   -DryRun                     Dry run (no downloads or installs).
   -Help, -?                   Show this help message and exit.
 "@
-        Write-Host $help
+    Write-Host $helpText
         exit 0
     }
 }
