@@ -39,6 +39,7 @@ param(
     [switch]$DownloadAllFiles,
     [Alias('DownloadOnly')][switch]$DownloadAllAndExit,
     [switch]$DownloadCuco,
+    [Alias('CucoOnly')][switch]$DownloadCucoAndExit,
     [string]$CucoTargetDir,
     [switch]$SingleDownloadMode,
     [int]$MaxConcurrentDownloads,
@@ -192,6 +193,7 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('DownloadAllFiles')) { $Config.DownloadAllFiles = $true }
     if ($PSBoundParameters.ContainsKey('DownloadAllAndExit')) { $Config.DownloadAllFiles = $true; $Script:ExitAfterDownloadAll = $true }
     if ($PSBoundParameters.ContainsKey('DownloadCuco')) { $Config.DownloadCuco = $true }
+    if ($PSBoundParameters.ContainsKey('DownloadCucoAndExit')) { $Config.DownloadCuco = $true; $Script:ExitAfterDownloadCuco = $true }
     if ($PSBoundParameters.ContainsKey('CucoTargetDir') -and $CucoTargetDir) { $Config.CucoTargetDir = $CucoTargetDir }
     if ($PSBoundParameters.ContainsKey('SingleDownloadMode')) { $Config.MaxConcurrentDownloads = 1 }
     if ($PSBoundParameters.ContainsKey('MaxConcurrentDownloads') -and $MaxConcurrentDownloads -gt 0) { $Config.MaxConcurrentDownloads = $MaxConcurrentDownloads }
@@ -218,21 +220,23 @@ if ($PSBoundParameters.Count -gt 0) {
 Usage: Install-AutoDeriva.ps1 [options]
 
 Options:
-  -ConfigPath <path>           Path to custom `config.json` to use as overrides.
-  -EnableLogging              Enable logging (overrides config).
-    -CleanLogs                  Delete ALL autoderiva-*.log files in the repo root.
-    -LogRetentionDays <n>       Auto-delete logs older than <n> days (default: 10).
-    -MaxLogFiles <n>            Keep only the newest <n> logs (default: 15).
-    -NoLogCleanup               Disable automatic log cleanup (retention/max-files).
-  -DownloadAllFiles           Download all files from manifest.
-  -DownloadCuco               Download the Cuco utility.
-  -CucoTargetDir <path>       Target dir for Cuco (defaults to Desktop).
-  -SingleDownloadMode         Force single-threaded downloads.
-  -MaxConcurrentDownloads <n> Set max parallel downloads.
-  -NoDiskSpaceCheck           Skip pre-flight disk space check.
-  -ShowConfig                 Print the effective configuration and exit.
-  -DryRun                     Dry run (no downloads or installs).
-  -Help, -?                   Show this help message and exit.
+    -ConfigPath <path>           Use a custom config file as overrides (default: repo config.json if present).
+    -EnableLogging              Enable logging (default from config: $($Config.EnableLogging)).
+    -CleanLogs                  Delete ALL autoderiva-*.log files in the repo root (default: disabled).
+    -LogRetentionDays <n>       Auto-delete logs older than <n> days (default from config: $($Config.LogRetentionDays)).
+    -MaxLogFiles <n>            Keep only the newest <n> logs (default from config: $($Config.MaxLogFiles)).
+    -NoLogCleanup               Disable automatic log cleanup (default from config: $(-not $Config.AutoCleanupLogs)).
+    -DownloadAllFiles           Download all files from manifest (default from config: $($Config.DownloadAllFiles)).
+    -DownloadAllAndExit         Download all files then exit (alias: -DownloadOnly; default: disabled).
+    -DownloadCuco               Download the Cuco utility (default from config: $($Config.DownloadCuco)).
+    -DownloadCucoAndExit         Download Cuco then exit (alias: -CucoOnly; default: disabled).
+    -CucoTargetDir <path>       Target dir for Cuco (default from config: $($Config.CucoTargetDir)).
+    -SingleDownloadMode         Force single-threaded downloads (default from config: $($Config.SingleDownloadMode)).
+    -MaxConcurrentDownloads <n> Set max parallel downloads (default from config: $($Config.MaxConcurrentDownloads)).
+    -NoDiskSpaceCheck           Skip pre-flight disk space check (default: disabled; config default: $(-not $Config.CheckDiskSpace)).
+    -ShowConfig                 Print the effective configuration and exit (default: disabled).
+    -DryRun                     Dry run (no downloads or installs; default: disabled).
+    -Help, -?                   Show this help message and exit.
 "@
     Write-Host $helpText
         exit 0
@@ -241,6 +245,9 @@ Options:
 
 # Ensure ExitAfterDownloadAll defaults to false
 $Script:ExitAfterDownloadAll = $false
+
+# Ensure ExitAfterDownloadCuco defaults to false
+$Script:ExitAfterDownloadCuco = $false
 
 # Initialize Stats
 $Script:Stats = @{
@@ -254,6 +261,9 @@ $Script:Stats = @{
     DriversInstalled      = 0
     DriversFailed         = 0
     RebootsRequired       = 0
+    CucoDownloaded         = 0
+    CucoDownloadFailed     = 0
+    CucoSkipped            = 0
 }
 
 function Invoke-AutoDerivaLogCleanup {
@@ -842,6 +852,7 @@ function Install-Driver {
 function Install-Cuco {
     if (-not $Config.DownloadCuco) {
         Write-AutoDerivaLog "INFO" "Cuco download is disabled in configuration." "Gray"
+        $Script:Stats.CucoSkipped++
         return
     }
 
@@ -894,15 +905,18 @@ function Install-Cuco {
     Write-AutoDerivaLog "INFO" "Downloading Cuco utility to: $TargetDir" "Cyan"
     
     try {
-        $null = Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
-        if (Test-Path $CucoDest) {
+        $ok = Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
+        if ($ok -and (Test-Path $CucoDest)) {
+            $Script:Stats.CucoDownloaded++
             Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded successfully." "Green"
         }
         else {
+            $Script:Stats.CucoDownloadFailed++
             Write-AutoDerivaLog "ERROR" "Failed to verify Cuco download." "Red"
         }
     }
     catch {
+        $Script:Stats.CucoDownloadFailed++
         Write-AutoDerivaLog "ERROR" "Failed to download Cuco: $_" "Red"
     }
 }
@@ -1090,6 +1104,20 @@ function Main {
         # Install Cuco
         Install-Cuco
 
+        if ($Script:ExitAfterDownloadCuco) {
+            Write-AutoDerivaLog "INFO" "DownloadCucoAndExit flag set. Exiting after Cuco download." "Cyan"
+
+            Write-Section "Completion"
+            $Duration = New-TimeSpan -Start $Script:Stats.StartTime -End (Get-Date)
+            Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $($Duration.ToString('hh\:mm\:ss'))." "Green"
+
+            Write-Section "Statistics"
+            Write-AutoDerivaLog "INFO" "Cuco Downloaded     : $($Script:Stats.CucoDownloaded)" "Green"
+            Write-AutoDerivaLog "INFO" "Cuco Failed         : $($Script:Stats.CucoDownloadFailed)" "Red"
+            Write-AutoDerivaLog "INFO" "Cuco Skipped        : $($Script:Stats.CucoSkipped)" "Gray"
+            return
+        }
+
         # Create Temp Directory
         $TempDir = Join-Path $env:TEMP "AutoDeriva_$(Get-Random)"
         New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
@@ -1133,9 +1161,15 @@ function Main {
         Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $($Duration.ToString('hh\:mm\:ss'))." "Green"
         
         Write-Section "Statistics"
+        Write-AutoDerivaLog "INFO" "Cuco Downloaded      : $($Script:Stats.CucoDownloaded)" "Green"
+        Write-AutoDerivaLog "INFO" "Cuco Failed          : $($Script:Stats.CucoDownloadFailed)" "Red"
+        Write-AutoDerivaLog "INFO" "Cuco Skipped         : $($Script:Stats.CucoSkipped)" "Gray"
         Write-AutoDerivaLog "INFO" "Hardware IDs Scanned : $($Script:Stats.DriversScanned)" "Cyan"
         Write-AutoDerivaLog "INFO" "Drivers Matched      : $($Script:Stats.DriversMatched)" "Cyan"
         Write-AutoDerivaLog "INFO" "Files Downloaded     : $($Script:Stats.FilesDownloaded)" "Cyan"
+        Write-AutoDerivaLog "INFO" "Files Failed         : $($Script:Stats.FilesDownloadFailed)" "Yellow"
+        Write-AutoDerivaLog "INFO" "Drivers Skipped      : $($Script:Stats.DriversSkipped)" "Gray"
+        Write-AutoDerivaLog "INFO" "Drivers Present      : $($Script:Stats.DriversAlreadyPresent)" "Gray"
         Write-AutoDerivaLog "INFO" "Drivers Installed    : $($Script:Stats.DriversInstalled)" "Green"
         Write-AutoDerivaLog "INFO" "Drivers Failed       : $($Script:Stats.DriversFailed)" "Red"
         if ($Script:Stats.RebootsRequired -gt 0) {
