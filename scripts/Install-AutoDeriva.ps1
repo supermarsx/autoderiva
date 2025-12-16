@@ -32,6 +32,7 @@
 param(
     [string]$ConfigPath,
     [switch]$EnableLogging,
+    [switch]$CleanLogs,
     [switch]$DownloadAllFiles,
     [Alias('DownloadOnly')][switch]$DownloadAllAndExit,
     [switch]$DownloadCuco,
@@ -40,11 +41,9 @@ param(
     [int]$MaxConcurrentDownloads,
     [switch]$NoDiskSpaceCheck,
     [switch]$ShowConfig,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [Alias('?')][switch]$Help
 )
-
-# Help alias (-?)
-[Alias('?')][switch]$Help
 
 # ---------------------------------------------------------------------------
 # 1. AUTO-ELEVATION
@@ -205,6 +204,7 @@ Usage: Install-AutoDeriva.ps1 [options]
 Options:
   -ConfigPath <path>           Path to custom `config.json` to use as overrides.
   -EnableLogging              Enable logging (overrides config).
+    -CleanLogs                  Delete existing autoderiva-*.log files in the repo root.
   -DownloadAllFiles           Download all files from manifest.
   -DownloadCuco               Download the Cuco utility.
   -CucoTargetDir <path>       Target dir for Cuco (defaults to Desktop).
@@ -225,16 +225,33 @@ $Script:ExitAfterDownloadAll = $false
 
 # Initialize Stats
 $Script:Stats = @{
-    StartTime        = Get-Date
-    DriversScanned   = 0
-    DriversMatched   = 0
-    FilesDownloaded  = 0
-    FilesDownloadFailed = 0
-    DriversSkipped = 0
+    StartTime             = Get-Date
+    DriversScanned        = 0
+    DriversMatched        = 0
+    FilesDownloaded       = 0
+    FilesDownloadFailed   = 0
+    DriversSkipped        = 0
     DriversAlreadyPresent = 0
-    DriversInstalled = 0
-    DriversFailed    = 0
-    RebootsRequired  = 0
+    DriversInstalled      = 0
+    DriversFailed         = 0
+    RebootsRequired       = 0
+}
+
+# Optional log cleanup (before creating a new log file)
+if ($PSBoundParameters.ContainsKey('CleanLogs')) {
+    try {
+        Get-ChildItem -Path $Script:RepoRoot -Filter 'autoderiva-*.log' -File -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host "Cleaned existing AutoDeriva logs (autoderiva-*.log)." -ForegroundColor Gray
+    }
+    catch {
+        Write-Warning "Failed to clean existing logs: $_"
+    }
+}
+
+# In test mode, default to no file logging unless explicitly forced.
+if ($env:AUTODERIVA_TEST -eq '1' -and -not $PSBoundParameters.ContainsKey('EnableLogging')) {
+    $Config.EnableLogging = $false
 }
 
 # Initialize Log
@@ -751,7 +768,8 @@ function Install-Driver {
             $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Failed"; Details = "INF Missing" }
         }
     }
-    Write-Progress -Id 1 -Activity "Installing Drivers" -Status "Completed" -PercentComplete 100 -Completed
+    Write-Progress -Id 1 -Activity "Installing Drivers" -Status "Completed" -PercentComplete 100
+    Write-Progress -Id 1 -Activity "Installing Drivers" -Completed
     return $Results
 }
 
@@ -865,13 +883,44 @@ function Invoke-ConcurrentDownload {
 
     Write-AutoDerivaLog "INFO" "Starting concurrent download of $( $FileList.Count ) files..." "Cyan"
 
+    # TestMode: run sequentially in-process for deterministic testing/mocking.
+    # IMPORTANT: Must not create runspaces or attempt real network operations.
+    if ($TestMode) {
+        $failedCount = 0
+        $total = $FileList.Count
+        $completed = 0
+
+        foreach ($file in $FileList) {
+            $ok = Invoke-DownloadFile -Url $file.Url -OutputPath $file.OutputPath
+            if (-not $ok) {
+                $failedCount++
+                Write-AutoDerivaLog "WARN" "Failed to download: $($file.Url)" "Yellow"
+            }
+
+            $completed++
+            $percent = [math]::Min(100, [int](($completed / $total) * 100))
+            Write-Progress -Activity "Downloading Files (TestMode)" -Status "$completed / $total files" -PercentComplete $percent
+        }
+        Write-Progress -Activity "Downloading Files (TestMode)" -Status "Completed" -PercentComplete 100
+        Write-Progress -Activity "Downloading Files (TestMode)" -Completed
+
+        if ($total -gt 0) {
+            $Script:Stats.FilesDownloadFailed += $failedCount
+            $Script:Stats.FilesDownloaded += ($total - $failedCount)
+        }
+
+        return
+    }
+
     # Test hook: allow substituting the entire concurrent download implementation for tests
     if ($Script:Test_InvokeConcurrentDownload) {
         return & $Script:Test_InvokeConcurrentDownload -FileList $FileList -MaxConcurrency $MaxConcurrency -TestMode:$TestMode
     }
 
-    $RunspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxConcurrency)
-    $RunspacePool.Open()
+    $RunspacePool = $null
+    try {
+        $RunspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxConcurrency)
+        $RunspacePool.Open()
 
     $ScriptBlock = {
         param($Url, $OutputPath, $MaxRetries)
@@ -912,46 +961,6 @@ function Invoke-ConcurrentDownload {
         }
     }
 
-    $Jobs = @()
-    foreach ($file in $FileList) {
-        $PS = [powershell]::Create().AddScript($ScriptBlock).AddArgument($file.Url).AddArgument($file.OutputPath).AddArgument(5)
-        $PS.RunspacePool = $RunspacePool
-        $Jobs += @{
-            PS     = $PS
-            Handle = $PS.BeginInvoke()
-            File   = $file
-        }
-    }
-
-    # Wait for completion
-    $total = $Jobs.Count
-    while (($Jobs | Where-Object { $_.Handle.IsCompleted }).Count -lt $total) {
-        $completed = ($Jobs | Where-Object { $_.Handle.IsCompleted }).Count
-        $percent = [math]::Min(100, [int](($completed / $total) * 100))
-        Write-Progress -Activity "Downloading Files (Concurrent)" -Status "$completed / $total files" -PercentComplete $percent
-        Start-Sleep -Milliseconds 200
-    }
-    Write-Progress -Activity "Downloading Files (Concurrent)" -Completed
-
-    $failedCount = 0
-    $total = $FileList.Count
-
-    if ($TestMode) {
-        # Run sequentially in-process for deterministic testing/mocking
-        $completed = 0
-        foreach ($file in $FileList) {
-            $ok = Invoke-DownloadFile -Url $file.Url -OutputPath $file.OutputPath
-            if (-not $ok) {
-                $failedCount++
-                Write-AutoDerivaLog "WARN" "Failed to download: $($file.Url)" "Yellow"
-            }
-            $completed++
-            $percent = [math]::Min(100, [int](($completed / $total) * 100))
-            Write-Progress -Activity "Downloading Files (TestMode)" -Status "$completed / $total files" -PercentComplete $percent
-        }
-        Write-Progress -Activity "Downloading Files (TestMode)" -Status "Completed" -PercentComplete 100 -Completed
-    }
-    else {
         $Jobs = @()
         foreach ($file in $FileList) {
             $PS = [powershell]::Create().AddScript($ScriptBlock).AddArgument($file.Url).AddArgument($file.OutputPath).AddArgument(5)
@@ -964,21 +973,22 @@ function Invoke-ConcurrentDownload {
         }
 
         # Wait for completion
+        $total = $Jobs.Count
         while (($Jobs | Where-Object { $_.Handle.IsCompleted }).Count -lt $total) {
             $completed = ($Jobs | Where-Object { $_.Handle.IsCompleted }).Count
             $percent = [math]::Min(100, [int](($completed / $total) * 100))
             Write-Progress -Activity "Downloading Files (Concurrent)" -Status "$completed / $total files" -PercentComplete $percent
             Start-Sleep -Milliseconds 200
         }
-        Write-Progress -Activity "Downloading Files (Concurrent)" -Status "Completed" -PercentComplete 100 -Completed
+        Write-Progress -Activity "Downloading Files (Concurrent)" -Status "Completed" -PercentComplete 100
+        Write-Progress -Activity "Downloading Files (Concurrent)" -Completed
 
+        $failedCount = 0
+        $total = $FileList.Count
         foreach ($job in $Jobs) {
             try {
                 $result = $job.PS.EndInvoke($job.Handle)
-                if ($result -and $result.Success) {
-                    # Success
-                }
-                else {
+                if (-not ($result -and $result.Success)) {
                     $failedCount++
                     $err = if ($result) { $result.Error } else { "Unknown error" }
                     Write-AutoDerivaLog "WARN" "Failed to download: $($job.File.Url) - $err" "Yellow"
@@ -992,15 +1002,21 @@ function Invoke-ConcurrentDownload {
                 $job.PS.Dispose()
             }
         }
+
+        # Update global stats
+        if ($total -gt 0) {
+            $Script:Stats.FilesDownloadFailed += $failedCount
+            $Script:Stats.FilesDownloaded += ($total - $failedCount)
+        }
+    }
+    finally {
+        if ($RunspacePool) {
+            try { $RunspacePool.Close() } catch { }
+            try { $RunspacePool.Dispose() } catch { }
+        }
     }
 
-    # Update global stats
-    if ($total -gt 0) {
-        $Script:Stats.FilesDownloadFailed += $failedCount
-        $Script:Stats.FilesDownloaded += ($total - $failedCount)
-    }
-
-    } # end function Invoke-ConcurrentDownload
+} # end function Invoke-ConcurrentDownload
 
 # ---------------------------------------------------------------------------
 # 3b. MAIN - Execution Entry Point

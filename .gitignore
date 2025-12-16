@@ -9,3 +9,5 @@ driver_folders.txt
 # Logs
 *.log
 dev-inspect-pester.ps1
+dev-parse-check.ps1
+pester-result.json

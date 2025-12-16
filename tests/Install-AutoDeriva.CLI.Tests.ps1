@@ -76,8 +76,8 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
 
         Invoke-ConcurrentDownload -FileList $list -TestMode
 
-        $Script:Stats.FilesDownloadFailed | Should -BeGreaterThanOrEqualTo ($initialFailed + 1)
-        $Script:Stats.FilesDownloaded | Should -BeGreaterThanOrEqualTo ($initialSuccess + 1)
+        $Script:Stats.FilesDownloadFailed | Should -BeGreaterOrEqual ($initialFailed + 1)
+        $Script:Stats.FilesDownloaded | Should -BeGreaterOrEqual ($initialSuccess + 1)
     }
 
     It 'Skips drivers missing InfPath without throwing' {
