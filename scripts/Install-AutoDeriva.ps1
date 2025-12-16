@@ -96,9 +96,9 @@ $DefaultConfig = @{
     ManifestPath           = "exports/driver_file_manifest.csv"
     EnableLogging          = $false
     LogLevel               = "INFO"
-    AutoCleanupLogs         = $true
-    LogRetentionDays        = 10
-    MaxLogFiles             = 15
+    AutoCleanupLogs        = $true
+    LogRetentionDays       = 10
+    MaxLogFiles            = 15
     DownloadAllFiles       = $false
     CucoBinaryPath         = "cuco/CtoolGui.exe"
     DownloadCuco           = $true
@@ -222,7 +222,7 @@ Usage: Install-AutoDeriva.ps1 [options]
 Options:
     -ConfigPath <path>           Use a custom config file as overrides (default: repo config.json if present).
     -EnableLogging              Enable logging (default from config: $($Config.EnableLogging)).
-    -CleanLogs                  Delete ALL autoderiva-*.log files in the repo root (default: disabled).
+    -CleanLogs                  Delete ALL autoderiva-*.log files in the logs folder (default: disabled).
     -LogRetentionDays <n>       Auto-delete logs older than <n> days (default from config: $($Config.LogRetentionDays)).
     -MaxLogFiles <n>            Keep only the newest <n> logs (default from config: $($Config.MaxLogFiles)).
     -NoLogCleanup               Disable automatic log cleanup (default from config: $(-not $Config.AutoCleanupLogs)).
@@ -238,7 +238,7 @@ Options:
     -DryRun                     Dry run (no downloads or installs; default: disabled).
     -Help, -?                   Show this help message and exit.
 "@
-    Write-Host $helpText
+        Write-Host $helpText
         exit 0
     }
 }
@@ -261,9 +261,9 @@ $Script:Stats = @{
     DriversInstalled      = 0
     DriversFailed         = 0
     RebootsRequired       = 0
-    CucoDownloaded         = 0
-    CucoDownloadFailed     = 0
-    CucoSkipped            = 0
+    CucoDownloaded        = 0
+    CucoDownloadFailed    = 0
+    CucoSkipped           = 0
 }
 
 function Invoke-AutoDerivaLogCleanup {
@@ -304,6 +304,11 @@ function Invoke-AutoDerivaLogCleanup {
     }
 }
 
+function Get-AutoDerivaLogDirectory {
+    param([string]$RepoRoot)
+    return (Join-Path $RepoRoot 'logs')
+}
+
 # In test mode, default to no file logging (and avoid cleanup) unless explicitly forced.
 if ($env:AUTODERIVA_TEST -eq '1' -and -not $PSBoundParameters.ContainsKey('EnableLogging')) {
     $Config.EnableLogging = $false
@@ -312,8 +317,9 @@ if ($env:AUTODERIVA_TEST -eq '1' -and -not $PSBoundParameters.ContainsKey('Enabl
 # Log cleanup/retention (before creating a new log file)
 if ($PSBoundParameters.ContainsKey('CleanLogs')) {
     try {
-        Invoke-AutoDerivaLogCleanup -RootPath $Script:RepoRoot -ForceAll
-        Write-Host "Cleaned existing AutoDeriva logs (autoderiva-*.log)." -ForegroundColor Gray
+        $logDir = Get-AutoDerivaLogDirectory -RepoRoot $Script:RepoRoot
+        Invoke-AutoDerivaLogCleanup -RootPath $logDir -ForceAll
+        Write-Host "Cleaned existing AutoDeriva logs in: $logDir" -ForegroundColor Gray
     }
     catch {
         Write-Warning "Failed to clean existing logs: $_"
@@ -321,7 +327,8 @@ if ($PSBoundParameters.ContainsKey('CleanLogs')) {
 }
 elseif ($Config.EnableLogging -and $Config.AutoCleanupLogs -and $env:AUTODERIVA_TEST -ne '1') {
     try {
-        Invoke-AutoDerivaLogCleanup -RootPath $Script:RepoRoot -RetentionDays $Config.LogRetentionDays -MaxFiles $Config.MaxLogFiles
+        $logDir = Get-AutoDerivaLogDirectory -RepoRoot $Script:RepoRoot
+        Invoke-AutoDerivaLogCleanup -RootPath $logDir -RetentionDays $Config.LogRetentionDays -MaxFiles $Config.MaxLogFiles
     }
     catch {
         Write-Warning "Log cleanup failed: $_"
@@ -331,10 +338,26 @@ elseif ($Config.EnableLogging -and $Config.AutoCleanupLogs -and $env:AUTODERIVA_
 # Initialize Log
 if ($Config.EnableLogging) {
     $LogFileName = "autoderiva-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
-    $LogFilePath = Join-Path $Script:RepoRoot $LogFileName
+    $LogDir = Get-AutoDerivaLogDirectory -RepoRoot $Script:RepoRoot
     try {
-        "AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
-        Write-Host "Logging enabled. Log file: $LogFilePath" -ForegroundColor Gray
+        if (-not (Test-Path $LogDir)) {
+            New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+        }
+    }
+    catch {
+        Write-Warning "Could not create log directory at $LogDir. Logging to console only."
+        $LogDir = $null
+    }
+
+    $LogFilePath = if ($LogDir) { Join-Path $LogDir $LogFileName } else { $null }
+    try {
+        if ($LogFilePath) {
+            "AutoDeriva Log Started: $(Get-Date)" | Out-File -FilePath $LogFilePath -Encoding utf8 -Force
+            Write-Host "Logging enabled. Log file: $LogFilePath" -ForegroundColor Gray
+        }
+        else {
+            Write-Host "Logging enabled. (console-only)" -ForegroundColor Gray
+        }
     }
     catch {
         Write-Warning "Could not write to log file at $LogFilePath. Logging to console only."
@@ -1000,44 +1023,44 @@ function Invoke-ConcurrentDownload {
         $RunspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxConcurrency)
         $RunspacePool.Open()
 
-    $ScriptBlock = {
-        param($Url, $OutputPath, $MaxRetries)
-        $ErrorActionPreference = "Stop"
-        try {
-            $dir = Split-Path $OutputPath -Parent
-            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $ScriptBlock = {
+            param($Url, $OutputPath, $MaxRetries)
+            $ErrorActionPreference = "Stop"
+            try {
+                $dir = Split-Path $OutputPath -Parent
+                if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
             
-            $retryCount = 0
-            $success = $false
-            $backoff = 2
+                $retryCount = 0
+                $success = $false
+                $backoff = 2
             
-            while (-not $success -and $retryCount -lt $MaxRetries) {
-                try {
-                    # Use .NET WebClient for better compatibility in runspaces
-                    $webClient = New-Object System.Net.WebClient
-                    $webClient.DownloadFile($Url, $OutputPath)
-                    $success = $true
-                }
-                catch {
-                    $retryCount++
-                    if ($retryCount -lt $MaxRetries) {
-                        Start-Sleep -Seconds $backoff
-                        $backoff = [math]::Min($backoff * 2, 60)
+                while (-not $success -and $retryCount -lt $MaxRetries) {
+                    try {
+                        # Use .NET WebClient for better compatibility in runspaces
+                        $webClient = New-Object System.Net.WebClient
+                        $webClient.DownloadFile($Url, $OutputPath)
+                        $success = $true
+                    }
+                    catch {
+                        $retryCount++
+                        if ($retryCount -lt $MaxRetries) {
+                            Start-Sleep -Seconds $backoff
+                            $backoff = [math]::Min($backoff * 2, 60)
+                        }
                     }
                 }
-            }
             
-            if ($success) { 
-                return @{ Success = $true; Url = $Url } 
+                if ($success) { 
+                    return @{ Success = $true; Url = $Url } 
+                }
+                else { 
+                    return @{ Success = $false; Url = $Url; Error = "Max retries exceeded" } 
+                }
             }
-            else { 
-                return @{ Success = $false; Url = $Url; Error = "Max retries exceeded" } 
+            catch {
+                return @{ Success = $false; Url = $Url; Error = $_.ToString() }
             }
         }
-        catch {
-            return @{ Success = $false; Url = $Url; Error = $_.ToString() }
-        }
-    }
 
         $Jobs = @()
         foreach ($file in $FileList) {
