@@ -42,12 +42,18 @@ Configuration keys
 | `CheckDiskSpace` | boolean | `true` | Enable/disable the disk space check (if `false`, the check is skipped). Default is `true`. |
 | `MaxConcurrentDownloads` | integer | `6` | Maximum number of parallel download threads used by the Runspace-based downloader. Lower this on low-resource systems. |
 | `SingleDownloadMode` | boolean | `false` | When `true`, forces `MaxConcurrentDownloads` to `1` and effectively disables concurrency. Default is `false`. |
+| `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, only scans devices that are missing drivers (PnP ProblemCode `28`) and ignores hardware IDs from devices with working drivers. Default is `true`. |
+| `ClearWifiProfiles` | boolean | `true` | When `true`, deletes all saved Wi‑Fi profiles at the end of the run. Default is `true`. |
+| `AskBeforeClearingWifiProfiles` | boolean | `false` | When `true`, asks for confirmation before deleting saved Wi‑Fi profiles. Default is `false` (no prompt). |
+| `AutoExitWithoutConfirmation` | boolean | `false` | When `true`, exits without waiting for confirmation at the end. Default is `false` (waits for Enter or Ctrl+C). |
 
 Notes & behavior
 
 - `SingleDownloadMode` is a convenience toggle that forces the downloader to operate one file at a time. This is useful on systems where concurrent downloads cause problems (e.g., due to throttling or instability).
 - `CheckDiskSpace` is run before creating the temporary workspace; set it to `false` if you have special storage arrangements or don't want the script to perform the free-space check.
 - To override defaults, create a `config.json` containing only the keys you want to change. Example above shows a minimal override.
+- `ScanOnlyMissingDrivers` uses the PnP ProblemCode to identify devices missing drivers. On some systems/hosts, determining the ProblemCode may be limited; if so, the scan may find fewer IDs.
+- `ClearWifiProfiles` runs at the end of the script so it does not interfere with driver downloads during the run.
 
 Troubleshooting tips
 

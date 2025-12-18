@@ -16,5 +16,9 @@
     "MinDiskSpaceMB": 3072,
     "CheckDiskSpace": true,
     "MaxConcurrentDownloads": 6,
-    "SingleDownloadMode": false
+    "SingleDownloadMode": false,
+    "ScanOnlyMissingDrivers": true,
+    "ClearWifiProfiles": true,
+    "AskBeforeClearingWifiProfiles": false,
+    "AutoExitWithoutConfirmation": false
 }

@@ -92,24 +92,29 @@ $ConfigFile = Join-Path $Script:RepoRoot "config.json"
 
 # Default Configuration (Fallback)
 $DefaultConfig = @{
-    BaseUrl                = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
-    InventoryPath          = "exports/driver_inventory.csv"
-    ManifestPath           = "exports/driver_file_manifest.csv"
-    EnableLogging          = $false
-    LogLevel               = "INFO"
-    AutoCleanupLogs        = $true
-    LogRetentionDays       = 10
-    MaxLogFiles            = 15
-    DownloadAllFiles       = $false
-    CucoBinaryPath         = "cuco/CtoolGui.exe"
-    DownloadCuco           = $true
-    CucoTargetDir          = "Desktop"
-    MaxRetries             = 5
-    MaxBackoffSeconds      = 60
-    MinDiskSpaceMB         = 3072
-    CheckDiskSpace         = $true
-    MaxConcurrentDownloads = 6
-    SingleDownloadMode     = $false
+    BaseUrl                       = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
+    InventoryPath                 = "exports/driver_inventory.csv"
+    ManifestPath                  = "exports/driver_file_manifest.csv"
+    EnableLogging                 = $false
+    LogLevel                      = "INFO"
+    AutoCleanupLogs               = $true
+    LogRetentionDays              = 10
+    MaxLogFiles                   = 15
+    DownloadAllFiles              = $false
+    CucoBinaryPath                = "cuco/CtoolGui.exe"
+    DownloadCuco                  = $true
+    CucoTargetDir                 = "Desktop"
+    MaxRetries                    = 5
+    MaxBackoffSeconds             = 60
+    MinDiskSpaceMB                = 3072
+    CheckDiskSpace                = $true
+    MaxConcurrentDownloads        = 6
+    SingleDownloadMode            = $false
+    # New defaults
+    ScanOnlyMissingDrivers        = $true
+    ClearWifiProfiles             = $true
+    AskBeforeClearingWifiProfiles = $false
+    AutoExitWithoutConfirmation   = $false
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -252,19 +257,88 @@ $Script:ExitAfterDownloadCuco = $false
 
 # Initialize Stats
 $Script:Stats = @{
-    StartTime             = Get-Date
-    DriversScanned        = 0
-    DriversMatched        = 0
-    FilesDownloaded       = 0
-    FilesDownloadFailed   = 0
-    DriversSkipped        = 0
-    DriversAlreadyPresent = 0
-    DriversInstalled      = 0
-    DriversFailed         = 0
-    RebootsRequired       = 0
-    CucoDownloaded        = 0
-    CucoDownloadFailed    = 0
-    CucoSkipped           = 0
+    StartTime                  = Get-Date
+    DriversScanned             = 0
+    DriversMatched             = 0
+    FilesDownloaded            = 0
+    FilesDownloadFailed        = 0
+    DriversSkipped             = 0
+    DriversAlreadyPresent      = 0
+    DriversInstalled           = 0
+    DriversFailed              = 0
+    RebootsRequired            = 0
+    CucoDownloaded             = 0
+    CucoDownloadFailed         = 0
+    CucoSkipped                = 0
+    UnknownDriversAfterInstall = 0
+}
+
+function Test-AutoDerivaPromptAvailable {
+    # Avoid hanging in non-interactive contexts (scheduled tasks/CI) and during tests
+    if ($env:AUTODERIVA_TEST -eq '1') { return $false }
+    try {
+        if (-not [Environment]::UserInteractive) { return $false }
+    }
+    catch { return $false }
+
+    try {
+        if ([Console]::IsInputRedirected) { return $false }
+    }
+    catch {
+        # If Console APIs aren't available, be conservative
+        return $false
+    }
+
+    return $true
+}
+
+function Wait-AutoDerivaExit {
+    param(
+        [switch]$AutoExit
+    )
+
+    if ($AutoExit) { return }
+    if (-not (Test-AutoDerivaPromptAvailable)) { return }
+
+    $message = 'Press Enter to close this window (or Ctrl+C)...'
+    try { Write-Host $message -ForegroundColor Gray } catch { Write-Verbose "Write-Host failed: $_" }
+
+    $script:__AutoDerivaCtrlC = $false
+    $handler = $null
+
+    try {
+        $handler = [ConsoleCancelEventHandler] {
+            param($source, $eventArgs)
+            $script:__AutoDerivaCtrlC = $true
+            $eventArgs.Cancel = $true
+        }
+        try { [Console]::add_CancelKeyPress($handler) } catch { Write-Verbose "Failed to register Ctrl+C handler: $_" }
+
+        while ($true) {
+            if ($script:__AutoDerivaCtrlC) { break }
+
+            try {
+                if ([Console]::KeyAvailable) {
+                    $key = [Console]::ReadKey($true)
+                    if ($key.Key -eq [ConsoleKey]::Enter) { break }
+                }
+                else {
+                    Start-Sleep -Milliseconds 100
+                }
+            }
+            catch {
+                # Fallback: if key polling isn't supported, try Read-Host once.
+                try { $null = Read-Host $message } catch { Write-Verbose "Read-Host failed: $_" }
+                break
+            }
+        }
+    }
+    finally {
+        if ($handler) {
+            try { [Console]::remove_CancelKeyPress($handler) } catch { Write-Verbose "Failed to remove Ctrl+C handler: $_" }
+        }
+        Remove-Variable -Name __AutoDerivaCtrlC -Scope Script -ErrorAction SilentlyContinue
+    }
 }
 
 function Invoke-AutoDerivaLogCleanup {
@@ -688,13 +762,64 @@ function Test-PreFlight {
     }
 }
 
+function Get-DeviceProblemCode {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstanceId
+    )
+
+    try {
+        $prop = Get-PnpDeviceProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction Stop
+        if ($null -ne $prop -and $null -ne $prop.Data) {
+            return [int]$prop.Data
+        }
+    }
+    catch {
+        return $null
+    }
+
+    return $null
+}
+
+function Get-MissingDriverDevice {
+    param(
+        [Parameter(Mandatory = $true)]$SystemDevices
+    )
+
+    $missing = @()
+    foreach ($dev in $SystemDevices) {
+        if (-not $dev) { continue }
+        if (-not ($dev.PSObject.Properties.Name -contains 'InstanceId')) { continue }
+        $code = Get-DeviceProblemCode -InstanceId $dev.InstanceId
+        # 28 = "The drivers for this device are not installed."
+        if ($code -eq 28) {
+            $missing += $dev
+        }
+    }
+    return $missing
+}
+
 # .SYNOPSIS
 #     Retrieves the Hardware IDs of the current system.
 # .OUTPUTS
 #     String[]. A list of Hardware IDs.
 function Get-SystemHardware {
+    [CmdletBinding()]
+    param(
+        [switch]$AllDevices
+    )
+
     Write-Section "Hardware Detection"
     Write-AutoDerivaLog "INFO" "Scanning system devices..." "Cyan"
+
+    # Test hook: allow tests or tooling to inject hardware IDs without querying PnP
+    if ($Script:Test_GetSystemHardware) {
+        $ids = @(& $Script:Test_GetSystemHardware)
+        $ids = $ids | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
+        $Script:Stats.DriversScanned = $ids.Count
+        Write-AutoDerivaLog "INFO" "Found $( $ids.Count ) active hardware IDs (test hook)." "Green"
+        return $ids
+    }
+
     try {
         $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
         if (-not $SystemDevices) { throw "Get-PnpDevice returned no results." }
@@ -702,11 +827,104 @@ function Get-SystemHardware {
     catch {
         throw "Failed to query system devices: $_"
     }
-    
+
+    $effectiveOnlyMissing = $false
+    if (-not $AllDevices) {
+        try { $effectiveOnlyMissing = [bool]$Config.ScanOnlyMissingDrivers } catch { $effectiveOnlyMissing = $false }
+    }
+
+    if ($effectiveOnlyMissing) {
+        $missingDevices = Get-MissingDriverDevice -SystemDevices $SystemDevices
+        Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28)." "Gray"
+        $SystemDevices = $missingDevices
+    }
+
     $SystemHardwareIds = $SystemDevices.HardwareID | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
     $Script:Stats.DriversScanned = $SystemHardwareIds.Count
     Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
     return $SystemHardwareIds
+}
+
+function Get-UnknownDriverDeviceCount {
+    # "Unknown" here means devices still missing drivers (ProblemCode 28)
+    try {
+        if ($Script:Test_GetUnknownDriverCount) {
+            return [int](& $Script:Test_GetUnknownDriverCount)
+        }
+
+        $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
+        if (-not $SystemDevices) { return 0 }
+        $missing = Get-MissingDriverDevice -SystemDevices $SystemDevices
+        return [int]$missing.Count
+    }
+    catch {
+        Write-Verbose "Failed to compute unknown driver count: $_"
+        return 0
+    }
+}
+
+function Clear-WifiProfile {
+    # Deletes all saved Wi-Fi profiles when enabled via config.
+    if ($env:AUTODERIVA_TEST -eq '1') {
+        Write-Verbose 'AUTODERIVA_TEST set - skipping Wi-Fi profile deletion.'
+        return
+    }
+
+    $enabled = $false
+    $ask = $false
+    try { $enabled = [bool]$Config.ClearWifiProfiles } catch { $enabled = $false }
+    try { $ask = [bool]$Config.AskBeforeClearingWifiProfiles } catch { $ask = $false }
+    if (-not $enabled) { return }
+
+    $profiles = @()
+    try {
+        $output = & netsh.exe wlan show profiles 2>$null
+        foreach ($line in $output) {
+            $m = [regex]::Match($line, 'All\s+User\s+Profile\s*:\s*(.+)$')
+            if ($m.Success) {
+                $name = $m.Groups[1].Value.Trim()
+                if ($name) { $profiles += $name }
+            }
+        }
+        $profiles = $profiles | Select-Object -Unique
+    }
+    catch {
+        Write-AutoDerivaLog 'WARN' "Failed to enumerate Wi-Fi profiles: $_" 'Yellow'
+        return
+    }
+
+    if ($profiles.Count -eq 0) {
+        Write-AutoDerivaLog 'INFO' 'No saved Wi-Fi profiles found.' 'Gray'
+        return
+    }
+
+    $doDelete = $true
+    if ($ask) {
+        if (-not (Test-AutoDerivaPromptAvailable)) {
+            Write-AutoDerivaLog 'WARN' 'Wi-Fi deletion confirmation requested but no interactive input available. Skipping Wi-Fi profile deletion.' 'Yellow'
+            return
+        }
+        $resp = $null
+        try { $resp = Read-Host 'Delete all saved Wi-Fi profiles? (y/N)' } catch { $resp = $null }
+        $doDelete = ($resp -match '^(y|yes)$')
+    }
+
+    if (-not $doDelete) {
+        Write-AutoDerivaLog 'INFO' 'Wi-Fi profile deletion skipped by user.' 'Gray'
+        return
+    }
+
+    Write-Section 'Wi-Fi Cleanup'
+    Write-AutoDerivaLog 'INFO' "Deleting $( $profiles.Count ) saved Wi-Fi profiles..." 'Cyan'
+    foreach ($p in $profiles) {
+        try {
+            & netsh.exe wlan delete profile name="$p" | Out-Null
+        }
+        catch {
+            Write-AutoDerivaLog 'WARN' "Failed to delete Wi-Fi profile '$p': $_" 'Yellow'
+        }
+    }
+    Write-AutoDerivaLog 'SUCCESS' 'Wi-Fi profile deletion complete.' 'Green'
 }
 
 # .SYNOPSIS
@@ -1183,6 +1401,11 @@ function Main {
         # Install Drivers
         $InstallResults = Install-Driver -DriverMatches $DriverMatches -TempDir $TempDir
 
+        # Compute unknown driver count after install attempt
+        if ($env:AUTODERIVA_TEST -ne '1') {
+            $Script:Stats.UnknownDriversAfterInstall = Get-UnknownDriverDeviceCount
+        }
+
         # Cleanup
         Write-Section "Cleanup"
         if (Test-Path $TempDir) {
@@ -1206,6 +1429,7 @@ function Main {
         Write-AutoDerivaLog "INFO" "Drivers Present      : $($Script:Stats.DriversAlreadyPresent)" "Gray"
         Write-AutoDerivaLog "INFO" "Drivers Installed    : $($Script:Stats.DriversInstalled)" "Green"
         Write-AutoDerivaLog "INFO" "Drivers Failed       : $($Script:Stats.DriversFailed)" "Red"
+        Write-AutoDerivaLog "INFO" "Unknown Drivers      : $($Script:Stats.UnknownDriversAfterInstall)" "Yellow"
         if ($Script:Stats.RebootsRequired -gt 0) {
             Write-AutoDerivaLog "WARN" "Reboots Required     : $($Script:Stats.RebootsRequired)" "Yellow"
         }
@@ -1222,6 +1446,9 @@ function Main {
             Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
         }
 
+        # Optional Wi-Fi cleanup at end (default enabled)
+        Clear-WifiProfile
+
     }
     catch {
         Write-AutoDerivaLog "FATAL" "An unexpected error occurred: $_" "Red"
@@ -1229,10 +1456,10 @@ function Main {
     }
     finally {
         Write-Host "`n"
-        # Avoid interactive prompt during automated tests
-        if ($env:AUTODERIVA_TEST -ne '1') {
-            try { Read-Host "Press Enter to close this window..." } catch { Write-Verbose "Read-Host failed: $_" }
-        }
+        # Avoid interactive prompt during automated tests; allow Ctrl+C as alternative to Enter.
+        $autoExit = $false
+        try { $autoExit = [bool]$Config.AutoExitWithoutConfirmation } catch { $autoExit = $false }
+        Wait-AutoDerivaExit -AutoExit:$autoExit
     }
 }
 
