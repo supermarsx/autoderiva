@@ -31,6 +31,7 @@
 # ---------------------------------------------------------------------------
 param(
     [string]$ConfigPath,
+    [string]$ConfigUrl,
     [switch]$EnableLogging,
     [switch]$CleanLogs,
     [int]$LogRetentionDays,
@@ -41,9 +42,33 @@ param(
     [switch]$DownloadCuco,
     [Alias('CucoOnly')][switch]$DownloadCucoAndExit,
     [string]$CucoTargetDir,
+    [switch]$AskBeforeDownloadCuco,
+    [switch]$NoAskBeforeDownloadCuco,
     [switch]$SingleDownloadMode,
     [int]$MaxConcurrentDownloads,
     [switch]$NoDiskSpaceCheck,
+
+    # Driver scan behavior
+    [switch]$ScanOnlyMissingDrivers,
+    [switch]$ScanAllDevices,
+
+    # Wi-Fi cleanup behavior
+    [switch]$ClearWifiProfiles,
+    [Alias('NoClearWifiProfiles')][switch]$NoWifiCleanup,
+    # WifiCleanupMode: prefer SingleOnly (delete only WifiProfileNameToDelete). NullOnly is kept as a backward-compatible alias.
+    [ValidateSet('SingleOnly', 'All', 'None', 'NullOnly')][string]$WifiCleanupMode,
+    [string]$WifiProfileNameToDelete,
+    [switch]$AskBeforeClearingWifiProfiles,
+    [switch]$NoAskBeforeClearingWifiProfiles,
+
+    # End-of-run behavior
+    [switch]$AutoExitWithoutConfirmation,
+    [switch]$RequireExitConfirmation,
+
+    # Stats display
+    [switch]$ShowOnlyNonZeroStats,
+    [switch]$ShowAllStats,
+
     [switch]$ShowConfig,
     [switch]$DryRun,
     [Alias('?')][switch]$Help
@@ -95,6 +120,7 @@ $DefaultConfig = @{
     BaseUrl                       = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
     InventoryPath                 = "exports/driver_inventory.csv"
     ManifestPath                  = "exports/driver_file_manifest.csv"
+    RemoteConfigUrl               = $null
     EnableLogging                 = $false
     LogLevel                      = "INFO"
     AutoCleanupLogs               = $true
@@ -104,6 +130,7 @@ $DefaultConfig = @{
     CucoBinaryPath                = "cuco/CtoolGui.exe"
     DownloadCuco                  = $true
     CucoTargetDir                 = "Desktop"
+    AskBeforeDownloadCuco         = $false
     MaxRetries                    = 5
     MaxBackoffSeconds             = 60
     MinDiskSpaceMB                = 3072
@@ -114,7 +141,10 @@ $DefaultConfig = @{
     ScanOnlyMissingDrivers        = $true
     ClearWifiProfiles             = $true
     AskBeforeClearingWifiProfiles = $false
+    WifiCleanupMode               = 'SingleOnly'
+    WifiProfileNameToDelete       = 'Null'
     AutoExitWithoutConfirmation   = $false
+    ShowOnlyNonZeroStats          = $true
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -165,6 +195,50 @@ if (Test-Path $ConfigFile) {
     }
 }
 
+function Import-AutoDerivaRemoteConfig {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url
+    )
+
+    try {
+        Write-Host "Loading remote configuration overrides from: $Url" -ForegroundColor Cyan
+        $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
+        $remote = $resp.Content | ConvertFrom-Json
+        if (-not $remote) { return $null }
+        return $remote
+    }
+    catch {
+        Write-Warning "Failed to load remote config overrides from '$Url': $_"
+        return $null
+    }
+}
+
+# 3. Optional: load remote config overrides (from config.json or CLI)
+$remoteOverrideUrl = $null
+try {
+    if ($Config.RemoteConfigUrl) { $remoteOverrideUrl = [string]$Config.RemoteConfigUrl }
+}
+catch { $remoteOverrideUrl = $null }
+
+if ($PSBoundParameters.ContainsKey('ConfigUrl') -and $ConfigUrl) {
+    $remoteOverrideUrl = $ConfigUrl
+}
+
+if ($remoteOverrideUrl) {
+    # In test mode, skip remote config fetch unless explicitly requested via -ConfigUrl
+    if ($env:AUTODERIVA_TEST -eq '1' -and -not $PSBoundParameters.ContainsKey('ConfigUrl')) {
+        Write-Verbose "AUTODERIVA_TEST set - skipping remote config override fetch (RemoteConfigUrl)."
+    }
+    else {
+        $RemoteOverrides = Import-AutoDerivaRemoteConfig -Url $remoteOverrideUrl
+        if ($RemoteOverrides) {
+            foreach ($prop in $RemoteOverrides.PSObject.Properties) {
+                $Config[$prop.Name] = $prop.Value
+            }
+        }
+    }
+}
+
 # Apply SingleDownloadMode override
 if ($Config.SingleDownloadMode) {
     Write-Host "Single Download Mode enabled. Forcing MaxConcurrentDownloads to 1." -ForegroundColor Yellow
@@ -201,9 +275,31 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('DownloadCuco')) { $Config.DownloadCuco = $true }
     if ($PSBoundParameters.ContainsKey('DownloadCucoAndExit')) { $Config.DownloadCuco = $true; $Script:ExitAfterDownloadCuco = $true }
     if ($PSBoundParameters.ContainsKey('CucoTargetDir') -and $CucoTargetDir) { $Config.CucoTargetDir = $CucoTargetDir }
+    if ($PSBoundParameters.ContainsKey('AskBeforeDownloadCuco')) { $Config.AskBeforeDownloadCuco = $true }
+    if ($PSBoundParameters.ContainsKey('NoAskBeforeDownloadCuco')) { $Config.AskBeforeDownloadCuco = $false }
     if ($PSBoundParameters.ContainsKey('SingleDownloadMode')) { $Config.MaxConcurrentDownloads = 1 }
     if ($PSBoundParameters.ContainsKey('MaxConcurrentDownloads') -and $MaxConcurrentDownloads -gt 0) { $Config.MaxConcurrentDownloads = $MaxConcurrentDownloads }
     if ($PSBoundParameters.ContainsKey('NoDiskSpaceCheck')) { $Config.CheckDiskSpace = $false }
+
+    # Driver scan toggles
+    if ($PSBoundParameters.ContainsKey('ScanOnlyMissingDrivers')) { $Config.ScanOnlyMissingDrivers = $true }
+    if ($PSBoundParameters.ContainsKey('ScanAllDevices')) { $Config.ScanOnlyMissingDrivers = $false }
+
+    # Wi-Fi cleanup toggles
+    if ($PSBoundParameters.ContainsKey('ClearWifiProfiles')) { $Config.ClearWifiProfiles = $true }
+    if ($PSBoundParameters.ContainsKey('NoWifiCleanup')) { $Config.ClearWifiProfiles = $false; $Config.WifiCleanupMode = 'None' }
+    if ($PSBoundParameters.ContainsKey('WifiCleanupMode') -and $WifiCleanupMode) { $Config.WifiCleanupMode = $WifiCleanupMode }
+    if ($PSBoundParameters.ContainsKey('WifiProfileNameToDelete') -and $WifiProfileNameToDelete) { $Config.WifiProfileNameToDelete = $WifiProfileNameToDelete }
+    if ($PSBoundParameters.ContainsKey('AskBeforeClearingWifiProfiles')) { $Config.AskBeforeClearingWifiProfiles = $true }
+    if ($PSBoundParameters.ContainsKey('NoAskBeforeClearingWifiProfiles')) { $Config.AskBeforeClearingWifiProfiles = $false }
+
+    # End-of-run toggles
+    if ($PSBoundParameters.ContainsKey('AutoExitWithoutConfirmation')) { $Config.AutoExitWithoutConfirmation = $true }
+    if ($PSBoundParameters.ContainsKey('RequireExitConfirmation')) { $Config.AutoExitWithoutConfirmation = $false }
+
+    # Stats display toggles
+    if ($PSBoundParameters.ContainsKey('ShowOnlyNonZeroStats')) { $Config.ShowOnlyNonZeroStats = $true }
+    if ($PSBoundParameters.ContainsKey('ShowAllStats')) { $Config.ShowOnlyNonZeroStats = $false }
 
     # Dry run flag - affects installation and downloads
     $Script:DryRun = $false
@@ -227,6 +323,7 @@ Usage: Install-AutoDeriva.ps1 [options]
 
 Options:
     -ConfigPath <path>           Use a custom config file as overrides (default: repo config.json if present).
+    -ConfigUrl <url>             Load JSON config overrides from a URL (overrides config RemoteConfigUrl when provided).
     -EnableLogging              Enable logging (default from config: $($Config.EnableLogging)).
     -CleanLogs                  Delete ALL autoderiva-*.log files in the logs folder (default: disabled).
     -LogRetentionDays <n>       Auto-delete logs older than <n> days (default from config: $($Config.LogRetentionDays)).
@@ -237,9 +334,28 @@ Options:
     -DownloadCuco               Download the Cuco utility (default from config: $($Config.DownloadCuco)).
     -DownloadCucoAndExit         Download Cuco then exit (alias: -CucoOnly; default: disabled).
     -CucoTargetDir <path>       Target dir for Cuco (default from config: $($Config.CucoTargetDir)).
+    -AskBeforeDownloadCuco       Ask before downloading Cuco (default from config: $($Config.AskBeforeDownloadCuco)).
+    -NoAskBeforeDownloadCuco     Disable the Cuco download prompt (default: disabled).
     -SingleDownloadMode         Force single-threaded downloads (default from config: $($Config.SingleDownloadMode)).
     -MaxConcurrentDownloads <n> Set max parallel downloads (default from config: $($Config.MaxConcurrentDownloads)).
     -NoDiskSpaceCheck           Skip pre-flight disk space check (default: disabled; config default: $(-not $Config.CheckDiskSpace)).
+
+    -ScanOnlyMissingDrivers      Only scan devices missing drivers (default from config: $($Config.ScanOnlyMissingDrivers)).
+    -ScanAllDevices              Scan all present devices (overrides ScanOnlyMissingDrivers; default: disabled).
+
+    -ClearWifiProfiles           Enable Wi-Fi cleanup at end (default from config: $($Config.ClearWifiProfiles)).
+    -NoWifiCleanup               Disable Wi-Fi cleanup at end (default: disabled).
+    -WifiCleanupMode <mode>      Wi-Fi cleanup mode: SingleOnly|All|None (default from config: $($Config.WifiCleanupMode)).
+    -WifiProfileNameToDelete <n> Profile name used by NullOnly mode (default from config: $($Config.WifiProfileNameToDelete)).
+    -AskBeforeClearingWifiProfiles   Ask before deleting Wi-Fi profiles (default from config: $($Config.AskBeforeClearingWifiProfiles)).
+    -NoAskBeforeClearingWifiProfiles Disable Wi-Fi deletion prompt (default: disabled).
+
+    -AutoExitWithoutConfirmation Exit without waiting at end (default from config: $($Config.AutoExitWithoutConfirmation)).
+    -RequireExitConfirmation     Force waiting at end (default: disabled).
+
+    -ShowOnlyNonZeroStats        Only show counters above 0 in Statistics (default from config: $($Config.ShowOnlyNonZeroStats)).
+    -ShowAllStats                Show all counters including zeros (default: disabled).
+
     -ShowConfig                 Print the effective configuration and exit (default: disabled).
     -DryRun                     Dry run (no downloads or installs; default: disabled).
     -Help, -?                   Show this help message and exit.
@@ -271,6 +387,20 @@ $Script:Stats = @{
     CucoDownloadFailed         = 0
     CucoSkipped                = 0
     UnknownDriversAfterInstall = 0
+}
+
+function Write-AutoDerivaStat {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][int]$Value,
+        [string]$Color = 'Cyan'
+    )
+
+    $onlyNonZero = $true
+    try { $onlyNonZero = [bool]$Config.ShowOnlyNonZeroStats } catch { $onlyNonZero = $true }
+    if ($onlyNonZero -and $Value -le 0) { return }
+
+    Write-AutoDerivaLog 'INFO' ("{0} : {1}" -f $Label, $Value) $Color
 }
 
 function Test-AutoDerivaPromptAvailable {
@@ -307,7 +437,7 @@ function Wait-AutoDerivaExit {
     $handler = $null
 
     try {
-        $handler = [ConsoleCancelEventHandler]{
+        $handler = [ConsoleCancelEventHandler] {
             param($ctrlCSource, $cancelEvent)
             [void]$ctrlCSource
             $script:__AutoDerivaCtrlC = $true
@@ -873,9 +1003,19 @@ function Clear-WifiProfile {
 
     $enabled = $false
     $ask = $false
+    $mode = 'SingleOnly'
+    $targetName = 'Null'
+
     try { $enabled = [bool]$Config.ClearWifiProfiles } catch { $enabled = $false }
     try { $ask = [bool]$Config.AskBeforeClearingWifiProfiles } catch { $ask = $false }
+    try { if ($Config.WifiCleanupMode) { $mode = [string]$Config.WifiCleanupMode } } catch { $mode = 'SingleOnly' }
+    try { if ($Config.WifiProfileNameToDelete) { $targetName = [string]$Config.WifiProfileNameToDelete } } catch { $targetName = 'Null' }
+
+    # Backward-compatible alias
+    if ($mode -eq 'NullOnly') { $mode = 'SingleOnly' }
+
     if (-not $enabled) { return }
+    if ($mode -eq 'None') { return }
 
     $profiles = @()
     try {
@@ -899,14 +1039,24 @@ function Clear-WifiProfile {
         return
     }
 
+    $profilesToDelete = @($profiles)
+    if ($mode -eq 'SingleOnly') {
+        $profilesToDelete = @($profiles | Where-Object { $_ -and $_.Trim() -ieq $targetName })
+        if ($profilesToDelete.Count -eq 0) {
+            Write-AutoDerivaLog 'INFO' "Wi-Fi profile '$targetName' not found; nothing to delete." 'Gray'
+            return
+        }
+    }
+
     $doDelete = $true
     if ($ask) {
         if (-not (Test-AutoDerivaPromptAvailable)) {
             Write-AutoDerivaLog 'WARN' 'Wi-Fi deletion confirmation requested but no interactive input available. Skipping Wi-Fi profile deletion.' 'Yellow'
             return
         }
+        $prompt = if ($mode -eq 'SingleOnly') { "Delete saved Wi-Fi profile '$targetName'? (y/N)" } else { 'Delete all saved Wi-Fi profiles? (y/N)' }
         $resp = $null
-        try { $resp = Read-Host 'Delete all saved Wi-Fi profiles? (y/N)' } catch { $resp = $null }
+        try { $resp = Read-Host $prompt } catch { $resp = $null }
         $doDelete = ($resp -match '^(y|yes)$')
     }
 
@@ -916,8 +1066,8 @@ function Clear-WifiProfile {
     }
 
     Write-Section 'Wi-Fi Cleanup'
-    Write-AutoDerivaLog 'INFO' "Deleting $( $profiles.Count ) saved Wi-Fi profiles..." 'Cyan'
-    foreach ($p in $profiles) {
+    Write-AutoDerivaLog 'INFO' "Deleting $( $profilesToDelete.Count ) saved Wi-Fi profile(s) (mode: $mode)..." 'Cyan'
+    foreach ($p in $profilesToDelete) {
         try {
             & netsh.exe wlan delete profile name="$p" | Out-Null
         }
@@ -1107,6 +1257,25 @@ function Install-Cuco {
         Write-AutoDerivaLog "INFO" "Cuco download is disabled in configuration." "Gray"
         $Script:Stats.CucoSkipped++
         return
+    }
+
+    $askCuco = $false
+    try { $askCuco = [bool]$Config.AskBeforeDownloadCuco } catch { $askCuco = $false }
+    if ($askCuco) {
+        if (-not (Test-AutoDerivaPromptAvailable)) {
+            Write-AutoDerivaLog 'WARN' 'Cuco download confirmation requested but no interactive input available. Skipping Cuco download.' 'Yellow'
+            $Script:Stats.CucoSkipped++
+            return
+        }
+
+        $resp = $null
+        try { $resp = Read-Host 'Download Cuco utility? (y/N)' } catch { $resp = $null }
+        $doDownload = ($resp -match '^(y|yes)$')
+        if (-not $doDownload) {
+            Write-AutoDerivaLog 'INFO' 'Cuco download skipped by user.' 'Gray'
+            $Script:Stats.CucoSkipped++
+            return
+        }
     }
 
     Write-Section "Cuco Utility"
@@ -1365,9 +1534,9 @@ function Main {
             Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $($Duration.ToString('hh\:mm\:ss'))." "Green"
 
             Write-Section "Statistics"
-            Write-AutoDerivaLog "INFO" "Cuco Downloaded     : $($Script:Stats.CucoDownloaded)" "Green"
-            Write-AutoDerivaLog "INFO" "Cuco Failed         : $($Script:Stats.CucoDownloadFailed)" "Red"
-            Write-AutoDerivaLog "INFO" "Cuco Skipped        : $($Script:Stats.CucoSkipped)" "Gray"
+            Write-AutoDerivaStat -Label 'Cuco Downloaded' -Value $Script:Stats.CucoDownloaded -Color 'Green'
+            Write-AutoDerivaStat -Label 'Cuco Failed' -Value $Script:Stats.CucoDownloadFailed -Color 'Red'
+            Write-AutoDerivaStat -Label 'Cuco Skipped' -Value $Script:Stats.CucoSkipped -Color 'Gray'
             return
         }
 
@@ -1419,18 +1588,18 @@ function Main {
         Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $($Duration.ToString('hh\:mm\:ss'))." "Green"
         
         Write-Section "Statistics"
-        Write-AutoDerivaLog "INFO" "Cuco Downloaded      : $($Script:Stats.CucoDownloaded)" "Green"
-        Write-AutoDerivaLog "INFO" "Cuco Failed          : $($Script:Stats.CucoDownloadFailed)" "Red"
-        Write-AutoDerivaLog "INFO" "Cuco Skipped         : $($Script:Stats.CucoSkipped)" "Gray"
-        Write-AutoDerivaLog "INFO" "Hardware IDs Scanned : $($Script:Stats.DriversScanned)" "Cyan"
-        Write-AutoDerivaLog "INFO" "Drivers Matched      : $($Script:Stats.DriversMatched)" "Cyan"
-        Write-AutoDerivaLog "INFO" "Files Downloaded     : $($Script:Stats.FilesDownloaded)" "Cyan"
-        Write-AutoDerivaLog "INFO" "Files Failed         : $($Script:Stats.FilesDownloadFailed)" "Yellow"
-        Write-AutoDerivaLog "INFO" "Drivers Skipped      : $($Script:Stats.DriversSkipped)" "Gray"
-        Write-AutoDerivaLog "INFO" "Drivers Present      : $($Script:Stats.DriversAlreadyPresent)" "Gray"
-        Write-AutoDerivaLog "INFO" "Drivers Installed    : $($Script:Stats.DriversInstalled)" "Green"
-        Write-AutoDerivaLog "INFO" "Drivers Failed       : $($Script:Stats.DriversFailed)" "Red"
-        Write-AutoDerivaLog "INFO" "Unknown Drivers      : $($Script:Stats.UnknownDriversAfterInstall)" "Yellow"
+        Write-AutoDerivaStat -Label 'Cuco Downloaded' -Value $Script:Stats.CucoDownloaded -Color 'Green'
+        Write-AutoDerivaStat -Label 'Cuco Failed' -Value $Script:Stats.CucoDownloadFailed -Color 'Red'
+        Write-AutoDerivaStat -Label 'Cuco Skipped' -Value $Script:Stats.CucoSkipped -Color 'Gray'
+        Write-AutoDerivaStat -Label 'Hardware IDs Scanned' -Value $Script:Stats.DriversScanned -Color 'Cyan'
+        Write-AutoDerivaStat -Label 'Drivers Matched' -Value $Script:Stats.DriversMatched -Color 'Cyan'
+        Write-AutoDerivaStat -Label 'Files Downloaded' -Value $Script:Stats.FilesDownloaded -Color 'Cyan'
+        Write-AutoDerivaStat -Label 'Files Failed' -Value $Script:Stats.FilesDownloadFailed -Color 'Yellow'
+        Write-AutoDerivaStat -Label 'Drivers Skipped' -Value $Script:Stats.DriversSkipped -Color 'Gray'
+        Write-AutoDerivaStat -Label 'Drivers Present' -Value $Script:Stats.DriversAlreadyPresent -Color 'Gray'
+        Write-AutoDerivaStat -Label 'Drivers Installed' -Value $Script:Stats.DriversInstalled -Color 'Green'
+        Write-AutoDerivaStat -Label 'Drivers Failed' -Value $Script:Stats.DriversFailed -Color 'Red'
+        Write-AutoDerivaStat -Label 'Unknown Drivers' -Value $Script:Stats.UnknownDriversAfterInstall -Color 'Yellow'
         if ($Script:Stats.RebootsRequired -gt 0) {
             Write-AutoDerivaLog "WARN" "Reboots Required     : $($Script:Stats.RebootsRequired)" "Yellow"
         }

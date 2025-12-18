@@ -2,6 +2,7 @@
     "BaseUrl": "https://raw.githubusercontent.com/supermarsx/autoderiva/main/",
     "InventoryPath": "exports/driver_inventory.csv",
     "ManifestPath": "exports/driver_file_manifest.csv",
+    "RemoteConfigUrl": null,
     "EnableLogging": true,
     "LogLevel": "INFO",
     "AutoCleanupLogs": true,
@@ -11,6 +12,7 @@
     "CucoBinaryPath": "cuco/CtoolGui.exe",
     "DownloadCuco": true,
     "CucoTargetDir": "Desktop",
+    "AskBeforeDownloadCuco": false,
     "MaxRetries": 5,
     "MaxBackoffSeconds": 60,
     "MinDiskSpaceMB": 3072,
@@ -20,5 +22,8 @@
     "ScanOnlyMissingDrivers": true,
     "ClearWifiProfiles": true,
     "AskBeforeClearingWifiProfiles": false,
-    "AutoExitWithoutConfirmation": false
+    "WifiCleanupMode": "SingleOnly",
+    "WifiProfileNameToDelete": "Null",
+    "AutoExitWithoutConfirmation": false,
+    "ShowOnlyNonZeroStats": true
 }

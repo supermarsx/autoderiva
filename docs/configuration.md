@@ -27,6 +27,7 @@ Configuration keys
 | `BaseUrl` | string | `https://raw.githubusercontent.com/supermarsx/autoderiva/main/` | Base URL used to fetch manifests and driver files. Change this to point to a different host if needed. |
 | `InventoryPath` | string | `exports/driver_inventory.csv` | Path (relative to `BaseUrl`) to the driver inventory CSV. |
 | `ManifestPath` | string | `exports/driver_file_manifest.csv` | Path (relative to `BaseUrl`) to the file manifest CSV. |
+| `RemoteConfigUrl` | string/null | `null` | Optional URL to a JSON config file whose properties are applied as overrides after `config.json`. Useful for centrally managed configs. |
 | `EnableLogging` | boolean | `true` | Enable writing a runtime log file. Log files are written under `logs/` when enabled. |
 | `LogLevel` | string | `INFO` | The logging verbosity. Supported values: `DEBUG`, `INFO`, `WARN`, `ERROR`. |
 | `AutoCleanupLogs` | boolean | `true` | If `true`, automatically deletes old log files using the retention rules below. |
@@ -35,6 +36,7 @@ Configuration keys
 | `DownloadAllFiles` | boolean | `false` | If `true`, downloads *all* files from the manifest (useful for offline scenarios). |
 | `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Relative path (from `BaseUrl`) to the Cuco utility binary. |
 | `DownloadCuco` | boolean | `true` | If `true`, the Cuco utility is downloaded to the target directory. |
+| `AskBeforeDownloadCuco` | boolean | `false` | When `true`, asks for confirmation before downloading Cuco. Default is `false` (no prompt). |
 | `CucoTargetDir` | string | `Desktop` | Where to place the Cuco binary. `Desktop` resolves to the original user's Desktop folder when possible. |
 | `MaxRetries` | integer | `5` | Number of retries the downloader will attempt on transient failures. |
 | `MaxBackoffSeconds` | integer | `60` | Maximum backoff time (in seconds) between retry attempts. |
@@ -43,9 +45,12 @@ Configuration keys
 | `MaxConcurrentDownloads` | integer | `6` | Maximum number of parallel download threads used by the Runspace-based downloader. Lower this on low-resource systems. |
 | `SingleDownloadMode` | boolean | `false` | When `true`, forces `MaxConcurrentDownloads` to `1` and effectively disables concurrency. Default is `false`. |
 | `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, only scans devices that are missing drivers (PnP ProblemCode `28`) and ignores hardware IDs from devices with working drivers. Default is `true`. |
-| `ClearWifiProfiles` | boolean | `true` | When `true`, deletes all saved Wi‑Fi profiles at the end of the run. Default is `true`. |
+| `ClearWifiProfiles` | boolean | `true` | Master switch for Wi‑Fi profile cleanup at the end of the run. Default is `true`. |
 | `AskBeforeClearingWifiProfiles` | boolean | `false` | When `true`, asks for confirmation before deleting saved Wi‑Fi profiles. Default is `false` (no prompt). |
+| `WifiCleanupMode` | string | `SingleOnly` | Wi‑Fi profile cleanup mode. Supported values: `SingleOnly`, `All`, `None`. Default is `SingleOnly` (delete only the profile name below). |
+| `WifiProfileNameToDelete` | string | `Null` | Wi‑Fi profile name used by `WifiCleanupMode: SingleOnly`. Default is `Null`. |
 | `AutoExitWithoutConfirmation` | boolean | `false` | When `true`, exits without waiting for confirmation at the end. Default is `false` (waits for Enter or Ctrl+C). |
+| `ShowOnlyNonZeroStats` | boolean | `true` | When `true`, the Statistics section only prints counters greater than `0`. Default is `true`. |
 
 Notes & behavior
 
@@ -53,7 +58,8 @@ Notes & behavior
 - `CheckDiskSpace` is run before creating the temporary workspace; set it to `false` if you have special storage arrangements or don't want the script to perform the free-space check.
 - To override defaults, create a `config.json` containing only the keys you want to change. Example above shows a minimal override.
 - `ScanOnlyMissingDrivers` uses the PnP ProblemCode to identify devices missing drivers. On some systems/hosts, determining the ProblemCode may be limited; if so, the scan may find fewer IDs.
-- `ClearWifiProfiles` runs at the end of the script so it does not interfere with driver downloads during the run.
+- Wi‑Fi cleanup runs at the end of the script so it does not interfere with driver downloads during the run.
+- Default Wi‑Fi behavior is conservative: `WifiCleanupMode: SingleOnly` with `WifiProfileNameToDelete: Null`.
 
 Troubleshooting tips
 
@@ -66,6 +72,7 @@ CLI Overrides
 Many of the configuration options can also be supplied as CLI flags when invoking `Install-AutoDeriva.ps1`. These flags will override values from `config.defaults.json` and `config.json`:
 
 * `-ConfigPath <path>` — Load the specified JSON file as additional overrides.
+* `-ConfigUrl <url>` — Load JSON config overrides from a URL (overrides `RemoteConfigUrl` when provided).
 * `-EnableLogging` — Enable logging regardless of config file.
 * `-CleanLogs` — Delete all `autoderiva-*.log` files in the `logs/` folder.
 * `-LogRetentionDays <n>` — Override `LogRetentionDays`.

@@ -50,6 +50,7 @@ See `docs/configuration.md` for configuration options and examples.
 You can pass script-level arguments when running `Install-AutoDeriva.ps1` directly. Common flags:
 
 * `-ConfigPath <path>` — Path to a custom `config.json` to override defaults.
+* `-ConfigUrl <url>` — Load JSON config overrides from a URL (also configurable via `RemoteConfigUrl` in `config.json`).
 * `-EnableLogging` — Enable logging (overrides config file setting).
 * `-CleanLogs` — Delete all `autoderiva-*.log` files in the `logs/` folder.
 * `-LogRetentionDays <n>` — Auto-delete logs older than `<n>` days (overrides config).
