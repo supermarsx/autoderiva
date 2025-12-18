@@ -76,6 +76,12 @@ param(
     # Banner / UI
     [bool]$ShowBanner,
 
+    # Performance tweaks (default enabled via config)
+    [switch]$NoDisableOneDriveStartup,
+    [switch]$NoHideTaskViewButton,
+    [switch]$NoDisableNewsAndInterestsAndWidgets,
+    [switch]$NoHideTaskbarSearch,
+
     # Performance tuning
     [ValidateSet('Parallel', 'Single')][string]$DeviceScanMode,
     [int]$DeviceScanMaxConcurrency,
@@ -259,6 +265,112 @@ function Write-AutoDerivaBanner {
     }
 }
 
+function Set-AutoDerivaRegistryDword {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][int]$Value
+    )
+
+    if ($Script:DryRun) {
+        Write-AutoDerivaLog 'INFO' "DryRun: Would set registry DWORD $Path\\$Name=$Value" 'Gray'
+        return
+    }
+
+    if ($Script:Test_SetRegistryDword) {
+        & $Script:Test_SetRegistryDword -Path $Path -Name $Name -Value $Value
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        try { New-Item -Path $Path -Force | Out-Null } catch { }
+    }
+
+    Set-ItemProperty -Path $Path -Name $Name -Type DWord -Value $Value -Force | Out-Null
+}
+
+function Remove-AutoDerivaRegistryValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($Script:DryRun) {
+        Write-AutoDerivaLog 'INFO' "DryRun: Would remove registry value $Path\\$Name" 'Gray'
+        return
+    }
+
+    if ($Script:Test_RemoveRegistryValue) {
+        & $Script:Test_RemoveRegistryValue -Path $Path -Name $Name
+        return
+    }
+
+    try {
+        Remove-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
+    }
+    catch {
+        Write-Verbose "Failed to remove registry value $Path\\$Name: $_"
+    }
+}
+
+function Apply-PerformanceTweaks {
+    [CmdletBinding()]
+    param()
+
+    Write-Section 'Performance Tweaks'
+
+    $disableOneDriveStartup = $true
+    $hideTaskView = $true
+    $disableFeedsWidgets = $true
+    $hideTaskbarSearch = $true
+
+    try { $disableOneDriveStartup = [bool]$Config.DisableOneDriveStartup } catch { }
+    try { $hideTaskView = [bool]$Config.HideTaskViewButton } catch { }
+    try { $disableFeedsWidgets = [bool]$Config.DisableNewsAndInterestsAndWidgets } catch { }
+    try { $hideTaskbarSearch = [bool]$Config.HideTaskbarSearch } catch { }
+
+    if ($disableOneDriveStartup) {
+        Write-AutoDerivaLog 'INFO' 'Disabling OneDrive auto-start...' 'Gray'
+        Remove-AutoDerivaRegistryValue -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'OneDrive'
+        Remove-AutoDerivaRegistryValue -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'OneDrive'
+    }
+    else {
+        Write-AutoDerivaLog 'INFO' 'Skipping OneDrive auto-start tweak (disabled by config).' 'Gray'
+    }
+
+    if ($hideTaskView) {
+        Write-AutoDerivaLog 'INFO' 'Hiding Task View button on taskbar...' 'Gray'
+        Set-AutoDerivaRegistryDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ShowTaskViewButton' -Value 0
+    }
+    else {
+        Write-AutoDerivaLog 'INFO' 'Skipping Task View tweak (disabled by config).' 'Gray'
+    }
+
+    if ($hideTaskbarSearch) {
+        Write-AutoDerivaLog 'INFO' 'Hiding Search on taskbar...' 'Gray'
+        Set-AutoDerivaRegistryDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Value 0
+    }
+    else {
+        Write-AutoDerivaLog 'INFO' 'Skipping taskbar Search tweak (disabled by config).' 'Gray'
+    }
+
+    if ($disableFeedsWidgets) {
+        Write-AutoDerivaLog 'INFO' 'Disabling News/Interests and Widgets...' 'Gray'
+
+        # Windows 10: News and interests (Feeds)
+        Set-AutoDerivaRegistryDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds' -Name 'ShellFeedsTaskbarViewMode' -Value 2
+        Set-AutoDerivaRegistryDword -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds' -Name 'EnableFeeds' -Value 0
+
+        # Windows 11: Widgets button
+        Set-AutoDerivaRegistryDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarDa' -Value 0
+    }
+    else {
+        Write-AutoDerivaLog 'INFO' 'Skipping News/Interests & Widgets tweak (disabled by config).' 'Gray'
+    }
+
+    Write-AutoDerivaLog 'INFO' 'Performance tweaks applied (some changes may require Explorer restart or sign-out).' 'Gray'
+}
+
 # ---------------------------------------------------------------------------
 # 2. CONFIGURATION & LOGGING
 # ---------------------------------------------------------------------------
@@ -301,6 +413,12 @@ $DefaultConfig = @{
     AutoExitWithoutConfirmation   = $false
     ShowOnlyNonZeroStats          = $true
     ShowBanner                    = $true
+
+    # Performance tweaks (Windows 10/11)
+    DisableOneDriveStartup         = $true
+    HideTaskViewButton             = $true
+    DisableNewsAndInterestsAndWidgets = $true
+    HideTaskbarSearch              = $true
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -488,6 +606,12 @@ if ($PSBoundParameters.Count -gt 0) {
     # Banner / UI toggles
     if ($PSBoundParameters.ContainsKey('ShowBanner')) { $Config.ShowBanner = [bool]$ShowBanner }
 
+    # Performance tweaks (No* switches disable the tweak)
+    if ($PSBoundParameters.ContainsKey('NoDisableOneDriveStartup')) { $Config.DisableOneDriveStartup = $false }
+    if ($PSBoundParameters.ContainsKey('NoHideTaskViewButton')) { $Config.HideTaskViewButton = $false }
+    if ($PSBoundParameters.ContainsKey('NoDisableNewsAndInterestsAndWidgets')) { $Config.DisableNewsAndInterestsAndWidgets = $false }
+    if ($PSBoundParameters.ContainsKey('NoHideTaskbarSearch')) { $Config.HideTaskbarSearch = $false }
+
     # Performance tuning
     if ($PSBoundParameters.ContainsKey('DeviceScanMode') -and $DeviceScanMode) { $Config.DeviceScanMode = $DeviceScanMode }
     if ($PSBoundParameters.ContainsKey('DeviceScanMaxConcurrency') -and $DeviceScanMaxConcurrency -gt 0) { $Config.DeviceScanMaxConcurrency = $DeviceScanMaxConcurrency }
@@ -557,6 +681,11 @@ Options:
     -RequireExitConfirmation     Force waiting at end (default: disabled).
 
     -ShowBanner <bool>          Enable/disable printing the startup banner (default from config: $($Config.ShowBanner)).
+
+    -NoDisableOneDriveStartup    Do NOT disable OneDrive auto-start for this run (tweak enabled by default).
+    -NoHideTaskViewButton        Do NOT hide the Task View button for this run.
+    -NoDisableNewsAndInterestsAndWidgets Do NOT disable News/Interests (Win10) and Widgets (Win11) for this run.
+    -NoHideTaskbarSearch         Do NOT hide the Search icon/box on the taskbar for this run.
 
     -DeviceScanMode <mode>       Device scan mode: Parallel|Single (default from config: $($Config.DeviceScanMode)).
     -DeviceScanMaxConcurrency <n> Max parallel workers for device scan (ProblemCode queries) when DeviceScanMode=Parallel (default from config: $($Config.DeviceScanMaxConcurrency)).
@@ -2453,6 +2582,8 @@ function Main {
         if ($Config.ShowBanner) {
             Write-AutoDerivaBanner
         }
+
+        Apply-PerformanceTweaks
 
         if ($Script:ExitAfterWifiCleanup) {
             Write-Section 'Wi-Fi Cleanup'

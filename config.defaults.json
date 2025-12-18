@@ -33,5 +33,10 @@
     "WifiProfileNameToDelete": "Null",
     "AutoExitWithoutConfirmation": false,
     "ShowOnlyNonZeroStats": true,
-    "ShowBanner": true
+    "ShowBanner": true,
+
+    "DisableOneDriveStartup": true,
+    "HideTaskViewButton": true,
+    "DisableNewsAndInterestsAndWidgets": true,
+    "HideTaskbarSearch": true
 }

@@ -68,6 +68,10 @@ Defaults shown below match `config.defaults.json`.
 | `DeviceScanMaxConcurrency` | integer | `8` | Max parallel workers for device scan (ProblemCode queries). Set to `1` to force single-threaded scan. |
 | `AutoExitWithoutConfirmation` | boolean | `false` | If `true`, exits without waiting for confirmation at the end. |
 | `ShowOnlyNonZeroStats` | boolean | `true` | If `true`, stats output hides 0 counters. |
+| `DisableOneDriveStartup` | boolean | `true` | If `true`, removes OneDrive from startup (does not uninstall/disable OneDrive). |
+| `HideTaskViewButton` | boolean | `true` | If `true`, hides the Task View button on the taskbar. |
+| `DisableNewsAndInterestsAndWidgets` | boolean | `true` | If `true`, disables News/Interests (Win10 feeds policy + taskbar setting) and hides Widgets (Win11). |
+| `HideTaskbarSearch` | boolean | `true` | If `true`, hides the Search icon/box on the taskbar. |
 
 ## Wi-Fi profile cleanup
 

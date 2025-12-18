@@ -165,6 +165,26 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config.DeviceScanMode | Should -Be 'Single'
     }
 
+    It 'Performance tweaks are enabled by default and can be disabled via No* switches' {
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true }
+        $config.DisableOneDriveStartup | Should -BeTrue
+        $config.HideTaskViewButton | Should -BeTrue
+        $config.DisableNewsAndInterestsAndWidgets | Should -BeTrue
+        $config.HideTaskbarSearch | Should -BeTrue
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoDisableOneDriveStartup = $true }
+        $config.DisableOneDriveStartup | Should -BeFalse
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoHideTaskViewButton = $true }
+        $config.HideTaskViewButton | Should -BeFalse
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoDisableNewsAndInterestsAndWidgets = $true }
+        $config.DisableNewsAndInterestsAndWidgets | Should -BeFalse
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoHideTaskbarSearch = $true }
+        $config.HideTaskbarSearch | Should -BeFalse
+    }
+
     It 'Counts failed file downloads in TestMode' {
         Write-Host "TEST: Counts failed file downloads in TestMode"
         $scriptFile = Join-Path (Resolve-Path "$PSScriptRoot\..").Path 'scripts\Install-AutoDeriva.ps1'
