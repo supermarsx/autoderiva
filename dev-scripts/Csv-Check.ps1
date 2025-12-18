@@ -15,7 +15,7 @@ function Assert-True {
     }
 }
 
-function Get-FileBytes {
+function Get-FileByteArray {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     Assert-True (Test-Path -LiteralPath $Path) "File not found: $Path"
@@ -28,7 +28,7 @@ function Assert-TextFileBasicHygiene {
         [Parameter(Mandatory = $true)][string]$Label
     )
 
-    $bytes = Get-FileBytes -Path $Path
+    $bytes = Get-FileByteArray -Path $Path
 
     # No NUL bytes (catches UTF-16 / binary)
     Assert-True (-not ($bytes -contains 0)) "$($Label): contains NUL bytes (likely UTF-16/binary). Use UTF-8 text."
@@ -95,7 +95,7 @@ function Assert-DriverManifest {
     $label = "driver_file_manifest.csv"
 
     $headers = Get-CsvHeadersRaw -Path $Path
-    Assert-HeadersExact -Actual $headers -Expected @('RelativePath', 'Size', 'AssociatedInf') -Label $label
+    Assert-HeadersExact -Actual $headers -Expected @('RelativePath', 'Size', 'Sha256', 'AssociatedInf') -Label $label
 
     $rows = Import-CsvStrict -Path $Path -Label $label
     Assert-True ($rows.Count -gt 0) "$($label): expected at least 1 data row."
@@ -114,6 +114,9 @@ function Assert-DriverManifest {
         $tmp = 0L
         $sizeOk = [int64]::TryParse([string]$row.Size, [ref]$tmp)
         Assert-True ($sizeOk -and $tmp -ge 0) "$($label): Size must be an integer >= 0 for $($row.RelativePath) (got '$($row.Size)')"
+
+        Assert-True (-not [string]::IsNullOrWhiteSpace($row.Sha256)) "$($label): Sha256 is empty for $($row.RelativePath)"
+        Assert-True ($row.Sha256 -match '^[A-Fa-f0-9]{64}$') "$($label): Sha256 must be 64 hex chars for $($row.RelativePath) (got '$($row.Sha256)')"
     }
 }
 

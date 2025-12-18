@@ -48,6 +48,11 @@ param(
     [int]$MaxConcurrentDownloads,
     [switch]$NoDiskSpaceCheck,
 
+    # File integrity verification
+    [bool]$VerifyFileHashes,
+    [ValidateSet('Parallel', 'Single')][string]$HashVerifyMode,
+    [int]$HashVerifyMaxConcurrency,
+
     # Driver scan behavior
     [switch]$ScanOnlyMissingDrivers,
     [switch]$ScanAllDevices,
@@ -138,6 +143,9 @@ $DefaultConfig = @{
     CheckDiskSpace                = $true
     MaxConcurrentDownloads        = 6
     SingleDownloadMode            = $false
+    VerifyFileHashes              = $false
+    HashVerifyMode                = 'Parallel'
+    HashVerifyMaxConcurrency      = 5
     # New defaults
     ScanOnlyMissingDrivers        = $true
     ClearWifiProfiles             = $true
@@ -306,6 +314,11 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('MaxConcurrentDownloads') -and $MaxConcurrentDownloads -gt 0) { $Config.MaxConcurrentDownloads = $MaxConcurrentDownloads }
     if ($PSBoundParameters.ContainsKey('NoDiskSpaceCheck')) { $Config.CheckDiskSpace = $false }
 
+    # File integrity verification
+    if ($PSBoundParameters.ContainsKey('VerifyFileHashes')) { $Config.VerifyFileHashes = [bool]$VerifyFileHashes }
+    if ($PSBoundParameters.ContainsKey('HashVerifyMode') -and $HashVerifyMode) { $Config.HashVerifyMode = $HashVerifyMode }
+    if ($PSBoundParameters.ContainsKey('HashVerifyMaxConcurrency') -and $HashVerifyMaxConcurrency -gt 0) { $Config.HashVerifyMaxConcurrency = $HashVerifyMaxConcurrency }
+
     # Driver scan toggles
     if ($PSBoundParameters.ContainsKey('ScanOnlyMissingDrivers')) { $Config.ScanOnlyMissingDrivers = $true }
     if ($PSBoundParameters.ContainsKey('ScanAllDevices')) { $Config.ScanOnlyMissingDrivers = $false }
@@ -365,6 +378,10 @@ Options:
     -SingleDownloadMode         Force single-threaded downloads (default from config: $($Config.SingleDownloadMode)).
     -MaxConcurrentDownloads <n> Set max parallel downloads (default from config: $($Config.MaxConcurrentDownloads)).
     -NoDiskSpaceCheck           Skip pre-flight disk space check (default: disabled; config default: $(-not $Config.CheckDiskSpace)).
+
+    -VerifyFileHashes <bool>     Enable/disable SHA256 verification using the manifest's Sha256 column (default from config: $($Config.VerifyFileHashes)).
+    -HashVerifyMode <mode>       Hash verification mode: Parallel|Single (default from config: $($Config.HashVerifyMode)).
+    -HashVerifyMaxConcurrency <n>Max parallel hash workers when HashVerifyMode=Parallel (default from config: $($Config.HashVerifyMaxConcurrency)).
 
     -ScanOnlyMissingDrivers      Only scan devices missing drivers (default from config: $($Config.ScanOnlyMissingDrivers)).
     -ScanAllDevices              Scan all present devices (overrides ScanOnlyMissingDrivers; default: disabled).
@@ -859,6 +876,177 @@ function Format-FileSize {
     return "{0:N2} {1}" -f $Bytes, $sizes[$i]
 }
 
+function Get-AutoDerivaSha256Hex {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($hashBytes)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        if ($stream) {
+            try { $stream.Dispose() }
+            catch { Write-Verbose "Failed to dispose file stream for SHA256: $_" }
+        }
+    }
+}
+
+function Test-AutoDerivaFileHash {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($ExpectedSha256)) { return $true }
+
+    $actual = Get-AutoDerivaSha256Hex -Path $Path
+    return ($actual -eq $ExpectedSha256.Trim().ToLowerInvariant())
+}
+
+function Invoke-DownloadedFileHashVerification {
+    param(
+        [Parameter(Mandatory = $true)]$FileList
+    )
+
+    $verify = $false
+    try { $verify = [bool]$Config.VerifyFileHashes } catch { $verify = $false }
+    if (-not $verify) { return }
+
+    $mode = 'Parallel'
+    try {
+        if ($Config.HashVerifyMode) { $mode = [string]$Config.HashVerifyMode }
+    }
+    catch { $mode = 'Parallel' }
+    if ($mode -notin @('Parallel', 'Single')) { $mode = 'Parallel' }
+
+    $maxConcurrency = 5
+    try {
+        if ($Config.HashVerifyMaxConcurrency -and [int]$Config.HashVerifyMaxConcurrency -gt 0) {
+            $maxConcurrency = [int]$Config.HashVerifyMaxConcurrency
+        }
+    }
+    catch { $maxConcurrency = 5 }
+    if ($maxConcurrency -le 0) { $maxConcurrency = 5 }
+    if ($mode -eq 'Single') { $maxConcurrency = 1 }
+
+    $toCheck = @()
+    foreach ($f in $FileList) {
+        if (-not $f) { continue }
+        if (-not ($f.ContainsKey('ExpectedSha256'))) { continue }
+        $expected = [string]$f.ExpectedSha256
+        if ([string]::IsNullOrWhiteSpace($expected)) { continue }
+        if (-not (Test-Path -LiteralPath $f.OutputPath)) { continue }
+        $toCheck += $f
+    }
+    if ($toCheck.Count -eq 0) { return }
+
+    $mismatch = 0
+    $checked = 0
+
+    if ($mode -eq 'Single') {
+        foreach ($f in $toCheck) {
+            $checked++
+            $ok = $false
+            try {
+                $ok = Test-AutoDerivaFileHash -Path $f.OutputPath -ExpectedSha256 ([string]$f.ExpectedSha256)
+            }
+            catch { $ok = $false }
+
+            if (-not $ok) {
+                $mismatch++
+                $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
+                $label = if ($rp) { $rp } else { [string]$f.OutputPath }
+                Write-AutoDerivaLog 'ERROR' "SHA256 mismatch: $label" 'Red'
+                try { Remove-Item -LiteralPath $f.OutputPath -Force -ErrorAction SilentlyContinue }
+                catch { Write-Verbose "Failed to remove file after SHA mismatch: $($f.OutputPath): $_" }
+
+                $Script:Stats.FilesDownloadFailed++
+                if ($Script:Stats.FilesDownloaded -gt 0) { $Script:Stats.FilesDownloaded-- }
+            }
+        }
+    }
+    else {
+        $runspacePool = $null
+        $jobs = @()
+        $scriptBlock = {
+            param($Path, $Expected)
+            $ErrorActionPreference = 'Stop'
+            $stream = $null
+            try {
+                $stream = [System.IO.File]::OpenRead($Path)
+                $sha = [System.Security.Cryptography.SHA256]::Create()
+                $hashBytes = $sha.ComputeHash($stream)
+                $actual = ([System.BitConverter]::ToString($hashBytes)).Replace('-', '').ToLowerInvariant()
+                $exp = ([string]$Expected).Trim().ToLowerInvariant()
+                return @{ Ok = ($actual -eq $exp); Actual = $actual }
+            }
+            finally {
+                if ($stream) {
+                    try { $stream.Dispose() }
+                    catch { Write-Verbose "Failed to dispose SHA256 stream in runspace: $_" }
+                }
+            }
+        }
+
+        try {
+            $runspacePool = [runspacefactory]::CreateRunspacePool(1, $maxConcurrency)
+            $runspacePool.Open()
+
+            foreach ($f in $toCheck) {
+                $ps = [powershell]::Create().AddScript($scriptBlock).AddArgument([string]$f.OutputPath).AddArgument([string]$f.ExpectedSha256)
+                $ps.RunspacePool = $runspacePool
+                $jobs += @{ PS = $ps; Handle = $ps.BeginInvoke(); File = $f }
+            }
+
+            foreach ($job in $jobs) {
+                $result = $null
+                try {
+                    $result = $job.PS.EndInvoke($job.Handle)
+                }
+                catch {
+                    $result = @{ Ok = $false; Actual = $null }
+                }
+                finally {
+                    $checked++
+                    try { $job.PS.Dispose() }
+                    catch { Write-Verbose "Failed to dispose hash runspace PowerShell instance: $_" }
+                }
+
+                if (-not ($result -and $result.Ok)) {
+                    $mismatch++
+                    $f = $job.File
+                    $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
+                    $label = if ($rp) { $rp } else { [string]$f.OutputPath }
+                    Write-AutoDerivaLog 'ERROR' "SHA256 mismatch: $label" 'Red'
+                    try { Remove-Item -LiteralPath $f.OutputPath -Force -ErrorAction SilentlyContinue }
+                    catch { Write-Verbose "Failed to remove file after SHA mismatch: $($f.OutputPath): $_" }
+
+                    $Script:Stats.FilesDownloadFailed++
+                    if ($Script:Stats.FilesDownloaded -gt 0) { $Script:Stats.FilesDownloaded-- }
+                }
+            }
+        }
+        finally {
+            if ($runspacePool) {
+                try { $runspacePool.Close() }
+                catch { Write-Verbose "Failed to close hash runspace pool: $_" }
+                try { $runspacePool.Dispose() }
+                catch { Write-Verbose "Failed to dispose hash runspace pool: $_" }
+            }
+        }
+    }
+
+    if ($mismatch -gt 0) {
+        Write-AutoDerivaLog 'WARN' "SHA256 verification failed for $mismatch file(s)." 'Yellow'
+    }
+}
+
 # .SYNOPSIS
 #     Downloads a file from a URL to a local path with retry logic and exponential backoff.
 # .PARAMETER Url
@@ -1343,13 +1531,16 @@ function Install-Driver {
         foreach ($file in $DriverFiles) {
             $remoteUrl = $Config.BaseUrl + $file.RelativePath
             $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
-            $AllFilesToDownload += @{ Url = $remoteUrl; OutputPath = $localPath }
+            $expected = $null
+            if ($file.PSObject.Properties.Name -contains 'Sha256') { $expected = $file.Sha256 }
+            $AllFilesToDownload += @{ Url = $remoteUrl; OutputPath = $localPath; RelativePath = $file.RelativePath; ExpectedSha256 = $expected }
         }
     }
     
     # 2. Download concurrently
     if ($AllFilesToDownload.Count -gt 0) {
         Invoke-ConcurrentDownload -FileList $AllFilesToDownload -MaxConcurrency $Config.MaxConcurrentDownloads
+        Invoke-DownloadedFileHashVerification -FileList $AllFilesToDownload
     }
     
     # 3. Install Drivers
@@ -1518,10 +1709,13 @@ function Invoke-DownloadAllFile {
     foreach ($file in $FileManifest) {
         $remoteUrl = $Config.BaseUrl + $file.RelativePath
         $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
-        $FileList += @{ Url = $remoteUrl; OutputPath = $localPath }
+        $expected = $null
+        if ($file.PSObject.Properties.Name -contains 'Sha256') { $expected = $file.Sha256 }
+        $FileList += @{ Url = $remoteUrl; OutputPath = $localPath; RelativePath = $file.RelativePath; ExpectedSha256 = $expected }
     }
     
     Invoke-ConcurrentDownload -FileList $FileList -MaxConcurrency $Config.MaxConcurrentDownloads
+    Invoke-DownloadedFileHashVerification -FileList $FileList
     $Script:Stats.FilesDownloaded += $FileList.Count
     if ($Script:ExitAfterDownloadAll) {
         Write-AutoDerivaLog "INFO" "DownloadAllAndExit flag set. Exiting after download." "Cyan"

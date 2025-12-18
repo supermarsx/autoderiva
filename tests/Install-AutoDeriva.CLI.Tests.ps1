@@ -53,6 +53,14 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config.CheckDiskSpace | Should -Be $false
     }
 
+    It 'Respects -VerifyFileHashes <bool> override' {
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; VerifyFileHashes = $true }
+        $config.VerifyFileHashes | Should -BeTrue
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; VerifyFileHashes = $false }
+        $config.VerifyFileHashes | Should -BeFalse
+    }
+
     It 'Supports -DryRun flag without errors (no downloads/installs)' {
         Write-Host "TEST: Supports -DryRun flag without errors (no downloads/installs)"
         Test-Path $script:ScriptFile | Should -BeTrue

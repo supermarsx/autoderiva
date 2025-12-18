@@ -60,6 +60,9 @@ Defaults shown below match `config.defaults.json`.
 | `CheckDiskSpace` | boolean | `true` | Enable/disable disk space checks. |
 | `MaxConcurrentDownloads` | integer | `6` | Maximum number of parallel downloads (runspace-based downloader). |
 | `SingleDownloadMode` | boolean | `false` | When `true`, forces `MaxConcurrentDownloads` to `1`. |
+| `VerifyFileHashes` | boolean | `false` | If `true`, verifies downloaded files using the `Sha256` column from the file manifest CSV. Disabled by default. |
+| `HashVerifyMode` | string | `Parallel` | Hash verification mode when `VerifyFileHashes` is enabled: `Parallel` or `Single`. |
+| `HashVerifyMaxConcurrency` | integer | `5` | Max number of files to hash in parallel when `HashVerifyMode` is `Parallel`. |
 | `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, scans only devices missing drivers (PnP ProblemCode `28`). |
 | `ClearWifiProfiles` | boolean | `true` | Master switch for Wi‑Fi profile cleanup at end of run. |
 | `AskBeforeClearingWifiProfiles` | boolean | `false` | If `true`, asks before deleting saved Wi‑Fi profiles. |
@@ -93,6 +96,9 @@ Download behavior:
 - `-SingleDownloadMode`
 - `-MaxConcurrentDownloads <n>`
 - `-NoDiskSpaceCheck`
+- `-VerifyFileHashes <true|false>`
+- `-HashVerifyMode <Parallel|Single>`
+- `-HashVerifyMaxConcurrency <n>`
 
 Cuco:
 

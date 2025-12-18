@@ -75,12 +75,22 @@ function Main {
     foreach ($file in $files) {
         # Calculate relative path (e.g., drivers/gw1-w149/...)
         $relPath = $file.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
+
+        $sha256 = $null
+        try {
+            $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash
+        }
+        catch {
+            Write-Warning "Failed to compute SHA256 for $($file.FullName): $_"
+            $sha256 = $null
+        }
         
         $associatedInf = Find-AssociatedInf -File $file -DriversPath $driversPath -RepoRoot $repoRoot
 
         $results += [PSCustomObject]@{
             RelativePath  = $relPath
             Size          = $file.Length
+            Sha256        = $sha256
             AssociatedInf = $associatedInf
         }
     }
