@@ -53,11 +53,12 @@ param(
     [switch]$ScanAllDevices,
 
     # Wi-Fi cleanup behavior
+    [Alias('WifiCleanupAndExit', 'WifiOnly')][switch]$ClearWifiAndExit,
     [switch]$ClearWifiProfiles,
     [Alias('NoClearWifiProfiles')][switch]$NoWifiCleanup,
     # WifiCleanupMode: prefer SingleOnly (delete only WifiProfileNameToDelete). NullOnly is kept as a backward-compatible alias.
     [ValidateSet('SingleOnly', 'All', 'None', 'NullOnly')][string]$WifiCleanupMode,
-    [string]$WifiProfileNameToDelete,
+    [Alias('WifiName', 'WifiProfileName')][string]$WifiProfileNameToDelete,
     [switch]$AskBeforeClearingWifiProfiles,
     [switch]$NoAskBeforeClearingWifiProfiles,
 
@@ -265,6 +266,11 @@ if ($Config.SingleDownloadMode) {
     # Single download mode forces a single concurrent worker; do not exit here
 }
 
+# Script flow flags (default)
+$Script:ExitAfterDownloadAll = $false
+$Script:ExitAfterDownloadCuco = $false
+$Script:ExitAfterWifiCleanup = $false
+
 # Apply CLI parameter overrides (if any)
 if ($PSBoundParameters.Count -gt 0) {
     Write-Host "Applying CLI overrides..." -ForegroundColor Cyan
@@ -305,6 +311,7 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('ScanAllDevices')) { $Config.ScanOnlyMissingDrivers = $false }
 
     # Wi-Fi cleanup toggles
+    if ($PSBoundParameters.ContainsKey('ClearWifiAndExit')) { $Script:ExitAfterWifiCleanup = $true; $Config.ClearWifiProfiles = $true }
     if ($PSBoundParameters.ContainsKey('ClearWifiProfiles')) { $Config.ClearWifiProfiles = $true }
     if ($PSBoundParameters.ContainsKey('NoWifiCleanup')) { $Config.ClearWifiProfiles = $false; $Config.WifiCleanupMode = 'None' }
     if ($PSBoundParameters.ContainsKey('WifiCleanupMode') -and $WifiCleanupMode) { $Config.WifiCleanupMode = $WifiCleanupMode }
@@ -362,10 +369,12 @@ Options:
     -ScanOnlyMissingDrivers      Only scan devices missing drivers (default from config: $($Config.ScanOnlyMissingDrivers)).
     -ScanAllDevices              Scan all present devices (overrides ScanOnlyMissingDrivers; default: disabled).
 
+    -ClearWifiAndExit            Only run Wi-Fi cleanup and exit (aliases: -WifiCleanupAndExit, -WifiOnly).
     -ClearWifiProfiles           Enable Wi-Fi cleanup at end (default from config: $($Config.ClearWifiProfiles)).
     -NoWifiCleanup               Disable Wi-Fi cleanup at end (default: disabled).
     -WifiCleanupMode <mode>      Wi-Fi cleanup mode: SingleOnly|All|None (default from config: $($Config.WifiCleanupMode)).
-    -WifiProfileNameToDelete <n> Profile name used by NullOnly mode (default from config: $($Config.WifiProfileNameToDelete)).
+    -WifiProfileNameToDelete <n> Profile name used by SingleOnly mode (default from config: $($Config.WifiProfileNameToDelete)).
+                                Aliases: -WifiName, -WifiProfileName
     -AskBeforeClearingWifiProfiles   Ask before deleting Wi-Fi profiles (default from config: $($Config.AskBeforeClearingWifiProfiles)).
     -NoAskBeforeClearingWifiProfiles Disable Wi-Fi deletion prompt (default: disabled).
 
@@ -383,12 +392,6 @@ Options:
         exit 0
     }
 }
-
-# Ensure ExitAfterDownloadAll defaults to false
-$Script:ExitAfterDownloadAll = $false
-
-# Ensure ExitAfterDownloadCuco defaults to false
-$Script:ExitAfterDownloadCuco = $false
 
 # Initialize Stats
 $Script:Stats = @{
@@ -1065,11 +1068,11 @@ function Get-MissingDriverDevice {
     return $missing
 }
 
-# .SYNOPSIS
-#     Retrieves the Hardware IDs of the current system.
-# .OUTPUTS
-#     String[]. A list of Hardware IDs.
 function Get-SystemHardware {
+    # .SYNOPSIS
+    #     Retrieves the Hardware IDs of the current system.
+    # .OUTPUTS
+    #     String[]. A list of Hardware IDs.
     [CmdletBinding()]
     param(
         [switch]$AllDevices
@@ -1698,6 +1701,12 @@ function Main {
     # .OUTPUTS
     #     None.
     try {
+        if ($Script:ExitAfterWifiCleanup) {
+            Write-Section 'Wi-Fi Cleanup'
+            Clear-WifiProfile
+            return
+        }
+
         # Install Cuco
         Install-Cuco
 

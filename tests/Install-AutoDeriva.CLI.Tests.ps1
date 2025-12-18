@@ -13,11 +13,11 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         function script:Get-AutoDerivaEffectiveConfig {
             param(
                 [Parameter(Mandatory = $true)][string]$ScriptFile,
-                [Parameter(Mandatory = $true)][object[]]$Args
+                [Parameter(Mandatory = $true)][hashtable]$Params
             )
 
             $env:AUTODERIVA_TEST = '1'
-            $raw = & $ScriptFile @Args 2>&1
+            $raw = & $ScriptFile @Params 2>&1
             $all = ($raw -join "`n").Trim()
 
             $m = [regex]::Match($all, 'AUTODERIVA::CONFIG::(\{.*\})', 'Singleline')
@@ -35,84 +35,94 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
     It 'Respects -MaxConcurrentDownloads override' {
         Write-Host "TEST: Respects -MaxConcurrentDownloads override"
         Test-Path $script:ScriptFile | Should -BeTrue
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-MaxConcurrentDownloads', 2)
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; MaxConcurrentDownloads = 2 }
         $config.MaxConcurrentDownloads | Should -Be 2
     }
 
     It 'Respects -DownloadAllAndExit (DownloadOnly) flag' {
         Write-Host "TEST: Respects -DownloadAllAndExit (DownloadOnly) flag"
         Test-Path $script:ScriptFile | Should -BeTrue
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-DownloadAllAndExit')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; DownloadAllAndExit = $true }
         $config.DownloadAllFiles | Should -Be $true
     }
 
     It 'Respects -NoDiskSpaceCheck flag' {
         Write-Host "TEST: Respects -NoDiskSpaceCheck flag"
         Test-Path $script:ScriptFile | Should -BeTrue
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-NoDiskSpaceCheck')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoDiskSpaceCheck = $true }
         $config.CheckDiskSpace | Should -Be $false
     }
 
     It 'Supports -DryRun flag without errors (no downloads/installs)' {
         Write-Host "TEST: Supports -DryRun flag without errors (no downloads/installs)"
         Test-Path $script:ScriptFile | Should -BeTrue
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-DryRun')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; DryRun = $true }
         $config | Should -Not -BeNullOrEmpty
     }
 
     It 'Respects -AskBeforeDownloadCuco and -NoAskBeforeDownloadCuco flags' {
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-AskBeforeDownloadCuco')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; AskBeforeDownloadCuco = $true }
         $config.AskBeforeDownloadCuco | Should -BeTrue
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-NoAskBeforeDownloadCuco')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoAskBeforeDownloadCuco = $true }
         $config.AskBeforeDownloadCuco | Should -BeFalse
 
         # If both are provided, the latter assignment in the script should win (NoAsk... sets false)
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-AskBeforeDownloadCuco', '-NoAskBeforeDownloadCuco')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; AskBeforeDownloadCuco = $true; NoAskBeforeDownloadCuco = $true }
         $config.AskBeforeDownloadCuco | Should -BeFalse
     }
 
     It 'Respects -ScanAllDevices and -ScanOnlyMissingDrivers flags' {
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-ScanOnlyMissingDrivers')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; ScanOnlyMissingDrivers = $true }
         $config.ScanOnlyMissingDrivers | Should -BeTrue
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-ScanAllDevices')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; ScanAllDevices = $true }
         $config.ScanOnlyMissingDrivers | Should -BeFalse
 
         # If both are provided, ScanAllDevices should win (sets ScanOnlyMissingDrivers false)
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-ScanOnlyMissingDrivers', '-ScanAllDevices')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; ScanOnlyMissingDrivers = $true; ScanAllDevices = $true }
         $config.ScanOnlyMissingDrivers | Should -BeFalse
     }
 
     It 'Respects -ShowAllStats and -ShowOnlyNonZeroStats flags' {
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-ShowOnlyNonZeroStats')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; ShowOnlyNonZeroStats = $true }
         $config.ShowOnlyNonZeroStats | Should -BeTrue
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-ShowAllStats')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; ShowAllStats = $true }
         $config.ShowOnlyNonZeroStats | Should -BeFalse
     }
 
     It 'Respects Wi-Fi cleanup toggles and mode values' {
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-NoWifiCleanup')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoWifiCleanup = $true }
         $config.ClearWifiProfiles | Should -BeFalse
         $config.WifiCleanupMode | Should -Be 'None'
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-WifiCleanupMode', 'All')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; WifiCleanupMode = 'All' }
         $config.WifiCleanupMode | Should -Be 'All'
 
         # Backward-compatible alias is accepted by CLI ValidateSet
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-WifiCleanupMode', 'NullOnly')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; WifiCleanupMode = 'NullOnly' }
         $config.WifiCleanupMode | Should -Be 'NullOnly'
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-WifiProfileNameToDelete', 'MyHotspot')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; WifiProfileNameToDelete = 'MyHotspot' }
         $config.WifiProfileNameToDelete | Should -Be 'MyHotspot'
     }
 
+    It 'Supports -ClearWifiAndExit without errors (test mode skips deletion)' {
+        $env:AUTODERIVA_TEST = '1'
+        { & $script:ScriptFile -ClearWifiAndExit | Out-Null } | Should -Not -Throw
+    }
+
+    It 'Accepts -WifiName alias for WifiProfileNameToDelete' {
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; WifiName = 'AliasHotspot' }
+        $config.WifiProfileNameToDelete | Should -Be 'AliasHotspot'
+    }
+
     It 'Respects end-of-run confirmation toggles' {
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-AutoExitWithoutConfirmation')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; AutoExitWithoutConfirmation = $true }
         $config.AutoExitWithoutConfirmation | Should -BeTrue
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Args @('-ShowConfig', '-RequireExitConfirmation')
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; RequireExitConfirmation = $true }
         $config.AutoExitWithoutConfirmation | Should -BeFalse
     }
 
