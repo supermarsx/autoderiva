@@ -1,8 +1,10 @@
 name: Publish Installers (main)
 
 on:
-  push:
-    branches: ["main"]
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
 
 # Needed to create/update releases and upload assets.
 permissions:
@@ -11,8 +13,9 @@ permissions:
 jobs:
   publish_installers:
     name: Publish Installers Release
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
     uses: ./.github/workflows/publish-installers.yml
     with:
       event_name: ${{ github.event_name }}
-      before: ${{ github.event.before }}
+      ref: ${{ github.event.workflow_run.head_sha }}
     secrets: inherit
