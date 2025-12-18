@@ -49,13 +49,3 @@ jobs:
       - name: Batch Runtime Test
         shell: pwsh
         run: .\dev-scripts\Batch-Check.ps1 -Mode Test
-
-  publish_installers:
-    name: Publish Installers Release
-    needs: [format, lint, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/publish-installers.yml
-    with:
-      event_name: ${{ github.event_name }}
-      before: ${{ github.event.before }}
-    secrets: inherit
