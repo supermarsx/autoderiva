@@ -26,6 +26,7 @@ if not defined PS_EXE (
   echo ERROR: PowerShell was not found. Please install PowerShell and try again.
   echo - Windows PowerShell is normally available on Windows.
   echo - PowerShell 7+ can be installed from https://aka.ms/powershell
+  call :maybe_pause
   exit /b 1
 )
 
@@ -38,10 +39,29 @@ set "TMP_PS1=%TEMP%\AutoDeriva_Install_%RANDOM%%RANDOM%.ps1"
 "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; $out=$env:TMP_PS1; if (-not $out) { throw 'TMP_PS1 not set' }; if ($p -and (Test-Path -LiteralPath $p)) { Copy-Item -LiteralPath $p -Destination $out -Force } else { Invoke-WebRequest -Uri $u -OutFile $out -UseBasicParsing -ErrorAction Stop } } catch { Write-Error $_; exit 1 }"
 if not %ERRORLEVEL%==0 (
   del "%TMP_PS1%" >nul 2>nul
+  call :maybe_pause
   exit /b %ERRORLEVEL%
 )
 
 "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS1%" %*
 set "RC=%ERRORLEVEL%"
 del "%TMP_PS1%" >nul 2>nul
+call :maybe_pause
 exit /b %RC%
+
+:maybe_pause
+REM Keep the window open when started via Explorer (cmd.exe /c) so errors/output are visible.
+REM - Set AUTODERIVA_BAT_PAUSE=1 to force pausing.
+REM - Set AUTODERIVA_BAT_NO_PAUSE=1 to disable pausing.
+if defined AUTODERIVA_BAT_NO_PAUSE exit /b 0
+
+set "_AUTODERIVA_PAUSE="
+echo %cmdcmdline% | find /I "/c" >nul 2>nul && set "_AUTODERIVA_PAUSE=1"
+if defined AUTODERIVA_BAT_PAUSE set "_AUTODERIVA_PAUSE=1"
+
+if defined _AUTODERIVA_PAUSE (
+  echo.
+  echo Press any key to close...
+  pause >nul
+)
+exit /b 0
