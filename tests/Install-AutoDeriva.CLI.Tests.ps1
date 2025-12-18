@@ -157,6 +157,14 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config.ShowBanner | Should -BeTrue
     }
 
+    It 'Respects DeviceScanMode override' {
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true }
+        $config.DeviceScanMode | Should -Be 'Multiple'
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; DeviceScanMode = 'Single' }
+        $config.DeviceScanMode | Should -Be 'Single'
+    }
+
     It 'Counts failed file downloads in TestMode' {
         Write-Host "TEST: Counts failed file downloads in TestMode"
         $scriptFile = Join-Path (Resolve-Path "$PSScriptRoot\..").Path 'scripts\Install-AutoDeriva.ps1'

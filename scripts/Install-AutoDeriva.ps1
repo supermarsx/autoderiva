@@ -77,6 +77,7 @@ param(
     [bool]$ShowBanner,
 
     # Performance tuning
+    [ValidateSet('Multiple', 'Single')][string]$DeviceScanMode,
     [int]$DeviceScanMaxConcurrency,
 
     # Stats display
@@ -198,6 +199,7 @@ $DefaultConfig = @{
     HashVerifyMaxConcurrency      = 5
     # New defaults
     ScanOnlyMissingDrivers        = $true
+    DeviceScanMode                = 'Multiple'
     DeviceScanMaxConcurrency      = 8
     ClearWifiProfiles             = $true
     AskBeforeClearingWifiProfiles = $false
@@ -394,6 +396,7 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('ShowBanner')) { $Config.ShowBanner = [bool]$ShowBanner }
 
     # Performance tuning
+    if ($PSBoundParameters.ContainsKey('DeviceScanMode') -and $DeviceScanMode) { $Config.DeviceScanMode = $DeviceScanMode }
     if ($PSBoundParameters.ContainsKey('DeviceScanMaxConcurrency') -and $DeviceScanMaxConcurrency -gt 0) { $Config.DeviceScanMaxConcurrency = $DeviceScanMaxConcurrency }
 
     # Stats display toggles
@@ -462,7 +465,8 @@ Options:
 
     -ShowBanner <bool>          Enable/disable printing the startup banner (default from config: $($Config.ShowBanner)).
 
-    -DeviceScanMaxConcurrency <n> Max parallel workers for device scan (ProblemCode queries) (default from config: $($Config.DeviceScanMaxConcurrency)).
+    -DeviceScanMode <mode>       Device scan mode: Multiple|Single (default from config: $($Config.DeviceScanMode)).
+    -DeviceScanMaxConcurrency <n> Max parallel workers for device scan (ProblemCode queries) when DeviceScanMode=Multiple (default from config: $($Config.DeviceScanMaxConcurrency)).
 
     -ShowOnlyNonZeroStats        Only show counters above 0 in Statistics (default from config: $($Config.ShowOnlyNonZeroStats)).
     -ShowAllStats                Show all counters including zeros (default: disabled).
@@ -1415,6 +1419,12 @@ function Get-MissingDriverDevice {
 
     # Parallelize the per-device ProblemCode query (Get-PnpDeviceProperty) via runspaces.
     # This can be a noticeable speedup on systems with lots of devices.
+    $mode = 'Multiple'
+    try {
+        if ($Config.DeviceScanMode) { $mode = [string]$Config.DeviceScanMode }
+    }
+    catch { $mode = 'Multiple' }
+
     $maxConcurrency = 8
     try {
         if ($Config.DeviceScanMaxConcurrency -and [int]$Config.DeviceScanMaxConcurrency -gt 0) {
@@ -1422,6 +1432,8 @@ function Get-MissingDriverDevice {
         }
     }
     catch { $maxConcurrency = 8 }
+
+    if ($mode -eq 'Single') { $maxConcurrency = 1 }
 
     if ($maxConcurrency -le 1) {
         $results = @()

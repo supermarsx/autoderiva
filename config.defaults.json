@@ -25,6 +25,7 @@
     "HashVerifyMode": "Parallel",
     "HashVerifyMaxConcurrency": 5,
     "ScanOnlyMissingDrivers": true,
+    "DeviceScanMode": "Multiple",
     "DeviceScanMaxConcurrency": 8,
     "ClearWifiProfiles": true,
     "AskBeforeClearingWifiProfiles": false,
