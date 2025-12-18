@@ -146,14 +146,14 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config.AutoExitWithoutConfirmation | Should -BeFalse
     }
 
-    It 'Respects -NoBanner and -ShowBanner toggles' {
+    It 'Respects -ShowBanner <bool> override' {
         $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true }
         $config.ShowBanner | Should -BeTrue
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoBanner = $true }
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; ShowBanner = $false }
         $config.ShowBanner | Should -BeFalse
 
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoBanner = $true; ShowBanner = $true }
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; ShowBanner = $true }
         $config.ShowBanner | Should -BeTrue
     }
 

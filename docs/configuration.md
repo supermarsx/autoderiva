@@ -66,6 +66,7 @@ Defaults shown below match `config.defaults.json`.
 | `HashVerifyMode` | string | `Parallel` | Hash verification mode when `VerifyFileHashes` is enabled: `Parallel` or `Single`. |
 | `HashVerifyMaxConcurrency` | integer | `5` | Max number of files to hash in parallel when `HashVerifyMode` is `Parallel`. |
 | `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, scans only devices missing drivers (PnP ProblemCode `28`). |
+| `DeviceScanMaxConcurrency` | integer | `8` | Max parallel workers for device scan (ProblemCode queries). Set to `1` to force single-threaded scan. |
 | `ClearWifiProfiles` | boolean | `true` | Master switch for Wi‑Fi profile cleanup at end of run. |
 | `AskBeforeClearingWifiProfiles` | boolean | `false` | If `true`, asks before deleting saved Wi‑Fi profiles. |
 | `WifiCleanupMode` | string | `SingleOnly` | Wi‑Fi cleanup mode: `SingleOnly`, `All`, or `None`. |
@@ -115,6 +116,7 @@ Driver scan behavior:
 
 - `-ScanOnlyMissingDrivers`
 - `-ScanAllDevices`
+- `-DeviceScanMaxConcurrency <n>`
 
 Wi‑Fi cleanup behavior:
 
@@ -135,4 +137,5 @@ Stats:
 Other:
 
 - `-DryRun`
+- `-ShowBanner <true|false>`
 - `-Help` / `-?`

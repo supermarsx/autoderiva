@@ -74,8 +74,10 @@ param(
     [switch]$RequireExitConfirmation,
 
     # Banner / UI
-    [switch]$ShowBanner,
-    [switch]$NoBanner,
+    [bool]$ShowBanner,
+
+    # Performance tuning
+    [int]$DeviceScanMaxConcurrency,
 
     # Stats display
     [switch]$ShowOnlyNonZeroStats,
@@ -196,6 +198,7 @@ $DefaultConfig = @{
     HashVerifyMaxConcurrency      = 5
     # New defaults
     ScanOnlyMissingDrivers        = $true
+    DeviceScanMaxConcurrency      = 8
     ClearWifiProfiles             = $true
     AskBeforeClearingWifiProfiles = $false
     WifiCleanupMode               = 'SingleOnly'
@@ -388,8 +391,10 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('RequireExitConfirmation')) { $Config.AutoExitWithoutConfirmation = $false }
 
     # Banner / UI toggles
-    if ($PSBoundParameters.ContainsKey('NoBanner') -and $NoBanner) { $Config.ShowBanner = $false }
-    if ($PSBoundParameters.ContainsKey('ShowBanner') -and $ShowBanner) { $Config.ShowBanner = $true }
+    if ($PSBoundParameters.ContainsKey('ShowBanner')) { $Config.ShowBanner = [bool]$ShowBanner }
+
+    # Performance tuning
+    if ($PSBoundParameters.ContainsKey('DeviceScanMaxConcurrency') -and $DeviceScanMaxConcurrency -gt 0) { $Config.DeviceScanMaxConcurrency = $DeviceScanMaxConcurrency }
 
     # Stats display toggles
     if ($PSBoundParameters.ContainsKey('ShowOnlyNonZeroStats')) { $Config.ShowOnlyNonZeroStats = $true }
@@ -455,8 +460,9 @@ Options:
     -AutoExitWithoutConfirmation Exit without waiting at end (default from config: $($Config.AutoExitWithoutConfirmation)).
     -RequireExitConfirmation     Force waiting at end (default: disabled).
 
-    -ShowBanner                 Force printing the startup banner (default from config: $($Config.ShowBanner)).
-    -NoBanner                   Disable printing the startup banner (default: disabled).
+    -ShowBanner <bool>          Enable/disable printing the startup banner (default from config: $($Config.ShowBanner)).
+
+    -DeviceScanMaxConcurrency <n> Max parallel workers for device scan (ProblemCode queries) (default from config: $($Config.DeviceScanMaxConcurrency)).
 
     -ShowOnlyNonZeroStats        Only show counters above 0 in Statistics (default from config: $($Config.ShowOnlyNonZeroStats)).
     -ShowAllStats                Show all counters including zeros (default: disabled).
@@ -1410,6 +1416,29 @@ function Get-MissingDriverDevice {
     # Parallelize the per-device ProblemCode query (Get-PnpDeviceProperty) via runspaces.
     # This can be a noticeable speedup on systems with lots of devices.
     $maxConcurrency = 8
+    try {
+        if ($Config.DeviceScanMaxConcurrency -and [int]$Config.DeviceScanMaxConcurrency -gt 0) {
+            $maxConcurrency = [int]$Config.DeviceScanMaxConcurrency
+        }
+    }
+    catch { $maxConcurrency = 8 }
+
+    if ($maxConcurrency -le 1) {
+        $results = @()
+        foreach ($dev in $devices) {
+            $code = Get-DeviceProblemCode -InstanceId $dev.InstanceId
+            $results += [PSCustomObject]@{ InstanceId = $dev.InstanceId; ProblemCode = $code }
+        }
+
+        $missingInstanceIds = @($results | Where-Object { $_ -and $_.ProblemCode -eq 28 } | ForEach-Object { $_.InstanceId })
+        if ($missingInstanceIds.Count -eq 0) { return @() }
+
+        $missing = @()
+        foreach ($dev in $devices) {
+            if ($missingInstanceIds -contains $dev.InstanceId) { $missing += $dev }
+        }
+        return $missing
+    }
     $results = @()
 
     try {
@@ -1421,18 +1450,18 @@ function Get-MissingDriverDevice {
             $ps = [PowerShell]::Create()
             $ps.RunspacePool = $runspacePool
             $null = $ps.AddScript({
-                param($instanceId)
-                try {
-                    Import-Module PnpDevice -ErrorAction SilentlyContinue | Out-Null
-                    $prop = Get-PnpDeviceProperty -InstanceId $instanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction Stop
-                    $val = $null
-                    try { $val = [int]$prop.Data } catch { $val = $null }
-                    return [PSCustomObject]@{ InstanceId = $instanceId; ProblemCode = $val }
-                }
-                catch {
-                    return [PSCustomObject]@{ InstanceId = $instanceId; ProblemCode = $null }
-                }
-            }).AddArgument($dev.InstanceId)
+                    param($instanceId)
+                    try {
+                        Import-Module PnpDevice -ErrorAction SilentlyContinue | Out-Null
+                        $prop = Get-PnpDeviceProperty -InstanceId $instanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction Stop
+                        $val = $null
+                        try { $val = [int]$prop.Data } catch { $val = $null }
+                        return [PSCustomObject]@{ InstanceId = $instanceId; ProblemCode = $val }
+                    }
+                    catch {
+                        return [PSCustomObject]@{ InstanceId = $instanceId; ProblemCode = $null }
+                    }
+                }).AddArgument($dev.InstanceId)
 
             $handle = $ps.BeginInvoke()
             $jobs.Add([PSCustomObject]@{ PowerShell = $ps; Handle = $handle })
