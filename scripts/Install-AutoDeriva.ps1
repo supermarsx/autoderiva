@@ -77,8 +77,7 @@ param(
     [bool]$ShowBanner,
 
     # Performance tuning
-    # Back-compat: accept "Multiple" but treat it as "Parallel"
-    [ValidateSet('Parallel', 'Single', 'Multiple')][string]$DeviceScanMode,
+    [ValidateSet('Parallel', 'Single')][string]$DeviceScanMode,
     [int]$DeviceScanMaxConcurrency,
 
     # Stats display
@@ -574,6 +573,11 @@ function Test-AutoDerivaPromptAvailable {
     #     if (Test-AutoDerivaPromptAvailable) { Read-Host 'Continue?' }
     # Avoid hanging in non-interactive contexts (scheduled tasks/CI) and during tests
     if ($env:AUTODERIVA_TEST -eq '1') { return $false }
+    if ($env:CI -eq '1' -or $env:GITHUB_ACTIONS -eq 'true') { return $false }
+
+    # VS Code integrated terminals can be interactive but Read-Host/Console APIs are
+    # flaky (and can hang). Be conservative there.
+    if ($env:TERM_PROGRAM -eq 'vscode' -or $env:VSCODE_PID) { return $false }
     try {
         if (-not [Environment]::UserInteractive) { return $false }
     }
@@ -583,8 +587,12 @@ function Test-AutoDerivaPromptAvailable {
         if ([Console]::IsInputRedirected) { return $false }
     }
     catch {
-        # If Console APIs aren't available, be conservative
-        return $false
+        # If Console APIs aren't available, still try prompting on ConsoleHost.
+        try {
+            if ($Host -and $Host.Name -eq 'ConsoleHost') { return $true }
+        }
+        catch { Write-Verbose "Prompt availability check failed: $_" }
+        return $true
     }
 
     return $true
@@ -617,7 +625,24 @@ function Wait-AutoDerivaExit {
     if ($AutoExit) { return }
     $promptOk = $false
     try { $promptOk = (Test-AutoDerivaPromptAvailable) } catch { $promptOk = $false }
-    if (-not $promptOk -and -not $Force) { return }
+    if (-not $promptOk -and -not $Force) {
+        # Best-effort: in classic console hosts, still pause to prevent the window
+        # from closing immediately when launched via cmd.exe /c or file association.
+        $safeToPrompt = $false
+        try {
+            $safeToPrompt = ([Environment]::UserInteractive -and ($Host.Name -eq 'ConsoleHost'))
+            if ($env:TERM_PROGRAM -eq 'vscode' -or $env:VSCODE_PID) { $safeToPrompt = $false }
+            if ($env:CI -eq '1' -or $env:GITHUB_ACTIONS -eq 'true') { $safeToPrompt = $false }
+            if ($env:AUTODERIVA_TEST -eq '1') { $safeToPrompt = $false }
+        }
+        catch { $safeToPrompt = $false }
+
+        if ($safeToPrompt) {
+            try { $null = Read-Host 'Press Enter to close this window...' }
+            catch { Write-Verbose "Read-Host failed in best-effort pause: $_" }
+        }
+        return
+    }
     if (-not $promptOk -and $Force) {
         try { $null = Read-Host 'Press Enter to close this window...' }
         catch { Write-Verbose "Read-Host failed in forced wait: $_" }
@@ -1445,9 +1470,6 @@ function Get-MissingDriverDevice {
         if ($Config.DeviceScanMode) { $mode = [string]$Config.DeviceScanMode }
     }
     catch { $mode = 'Parallel' }
-
-    # Back-compat: treat "Multiple" as "Parallel"
-    if ($mode -eq 'Multiple') { $mode = 'Parallel' }
 
     $maxConcurrency = 8
     try {
