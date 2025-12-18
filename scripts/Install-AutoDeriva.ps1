@@ -100,7 +100,44 @@ if ($env:AUTODERIVA_TEST -ne '1') {
         $noExit = ($env:AUTODERIVA_NOEXIT -eq '1')
         $elevatedArgList = @('-NoProfile', '-ExecutionPolicy', 'Bypass')
         if ($noExit) { $elevatedArgList += '-NoExit' }
-        $elevatedArgList += @('-File', $MyInvocation.MyCommand.Definition)
+
+        # If launched via the BAT, prefer the repo-local script path for elevation.
+        # This avoids a race where the BAT deletes the temp-downloaded script while
+        # the elevated process is starting.
+        $scriptToRun = $MyInvocation.MyCommand.Definition
+        try {
+            if ($env:AUTODERIVA_REPOROOT) {
+                $candidate = Join-Path $env:AUTODERIVA_REPOROOT 'scripts\Install-AutoDeriva.ps1'
+                if (Test-Path -LiteralPath $candidate) { $scriptToRun = $candidate }
+            }
+        }
+        catch {
+            Write-Verbose "Failed to resolve repo script path for elevation: $_"
+        }
+
+        # If we're still pointing at a temp-downloaded script, copy it to a stable
+        # temp location so the BAT launcher can't delete it before the elevated
+        # process reads it.
+        try {
+            $tempRoot = $env:TEMP
+            if ($tempRoot -and $scriptToRun -and (Test-Path -LiteralPath $scriptToRun)) {
+                $full = (Resolve-Path -LiteralPath $scriptToRun).Path
+                if ($full -like (Join-Path $tempRoot '*')) {
+                    $stableDir = Join-Path $tempRoot 'AutoDeriva_Elevate'
+                    if (-not (Test-Path -LiteralPath $stableDir)) {
+                        New-Item -ItemType Directory -Path $stableDir -Force | Out-Null
+                    }
+                    $stable = Join-Path $stableDir 'Install-AutoDeriva.ps1'
+                    Copy-Item -LiteralPath $full -Destination $stable -Force
+                    $scriptToRun = $stable
+                }
+            }
+        }
+        catch {
+            Write-Verbose "Failed to create stable elevation script copy: $_"
+        }
+
+        $elevatedArgList += @('-File', $scriptToRun)
 
         # Preserve original CLI args for the elevated run.
         # Prefer $PSBoundParameters (typed) so switches/values are reconstructed reliably.
@@ -120,7 +157,30 @@ if ($env:AUTODERIVA_TEST -ne '1') {
             $elevatedArgList += @("-$key", [string]$value)
         }
 
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $elevatedArgList -Verb RunAs -PassThru | Out-Null
+        # Use the current host executable when possible (pwsh stays pwsh; Windows PowerShell stays powershell).
+        $hostExe = 'powershell.exe'
+        try {
+            $pwshInPSHome = Join-Path $PSHOME 'pwsh.exe'
+            $powershellInPSHome = Join-Path $PSHOME 'powershell.exe'
+            if (Test-Path -LiteralPath $pwshInPSHome) { $hostExe = $pwshInPSHome }
+            elseif (Test-Path -LiteralPath $powershellInPSHome) { $hostExe = $powershellInPSHome }
+        }
+        catch {
+            Write-Verbose "Failed to resolve host exe from PSHOME: $_"
+        }
+
+        $wd = $null
+        try {
+            if ($env:AUTODERIVA_REPOROOT -and (Test-Path -LiteralPath $env:AUTODERIVA_REPOROOT)) { $wd = $env:AUTODERIVA_REPOROOT }
+        }
+        catch { $wd = $null }
+
+        if ($wd) {
+            Start-Process -FilePath $hostExe -ArgumentList $elevatedArgList -WorkingDirectory $wd -Verb RunAs -PassThru | Out-Null
+        }
+        else {
+            Start-Process -FilePath $hostExe -ArgumentList $elevatedArgList -Verb RunAs -PassThru | Out-Null
+        }
 
         # IMPORTANT: `exit` terminates the entire host (even if launched with -NoExit).
         # When troubleshooting mode is enabled, return so the console remains open.
@@ -483,6 +543,7 @@ Options:
 # Initialize Stats
 $Script:Stats = @{
     StartTime                  = Get-Date
+    EndTime                    = $null
     DriversScanned             = 0
     DriversMatched             = 0
     FilesDownloaded            = 0
@@ -496,6 +557,72 @@ $Script:Stats = @{
     CucoDownloadFailed         = 0
     CucoSkipped                = 0
     UnknownDriversAfterInstall = 0
+}
+
+# Section timing tracking (elapsed time per section between Write-Section calls)
+$Script:SectionTimings = New-Object System.Collections.Generic.List[object]
+$Script:CurrentSectionTitle = $null
+$Script:CurrentSectionStart = $null
+
+function Format-AutoDerivaDuration {
+    param(
+        [Parameter(Mandatory = $true)][TimeSpan]$Duration
+    )
+
+    $totalSeconds = 0
+    try { $totalSeconds = [int][Math]::Floor($Duration.TotalSeconds) } catch { $totalSeconds = 0 }
+    if ($totalSeconds -lt 0) { $totalSeconds = 0 }
+
+    $hours = [int]($totalSeconds / 3600)
+    $minutes = [int](($totalSeconds % 3600) / 60)
+    $seconds = [int]($totalSeconds % 60)
+    return ('{0:D2}:{1:D2}:{2:D2}' -f $hours, $minutes, $seconds)
+}
+
+function Complete-AutoDerivaSectionTiming {
+    param(
+        [Parameter(Mandatory = $true)][DateTime]$Now
+    )
+
+    if (-not $Script:CurrentSectionTitle) { return }
+    if (-not $Script:CurrentSectionStart) { return }
+
+    $elapsed = $Now - $Script:CurrentSectionStart
+    $Script:SectionTimings.Add([PSCustomObject]@{
+            Title   = [string]$Script:CurrentSectionTitle
+            Elapsed = $elapsed
+        })
+}
+
+function Write-AutoDerivaStatText {
+    # .SYNOPSIS
+    #     Writes a stat line with a non-numeric value.
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$Value,
+        [string]$Color = 'Cyan'
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { $Value = '' }
+
+    try {
+        Write-Host "   [" -NoNewline -ForegroundColor $Script:ColorDim
+        Write-Host "STAT" -NoNewline -ForegroundColor $Color
+        Write-Host ("] {0} : {1}" -f $Label, $Value) -ForegroundColor $Script:ColorText
+    }
+    catch {
+        Write-Output ("STAT {0} : {1}" -f $Label, $Value)
+    }
+
+    if ($LogFilePath) {
+        try {
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Add-Content -Path $LogFilePath -Value ("[$timestamp] [INFO] {0} : {1}" -f $Label, $Value) -ErrorAction SilentlyContinue
+        }
+        catch {
+            Write-Verbose "Failed to write stat text to log file: $_"
+        }
+    }
 }
 
 function Write-AutoDerivaStat {
@@ -908,6 +1035,17 @@ function Write-BrandHeader {
 #     The title of the section.
 function Write-Section {
     param([string]$Title)
+
+    try {
+        $now = Get-Date
+        Complete-AutoDerivaSectionTiming -Now $now
+        $Script:CurrentSectionTitle = $Title
+        $Script:CurrentSectionStart = $now
+    }
+    catch {
+        Write-Verbose "Section timing update failed: $_"
+    }
+
     Write-Host "`n   [$Title]" -ForegroundColor $Script:ColorHeader
     Write-Host "   " ("-" * ($Title.Length + 2)) -ForegroundColor $Script:ColorAccent
     if ($LogFilePath) {
@@ -2259,14 +2397,35 @@ function Main {
         if ($Script:ExitAfterDownloadCuco) {
             Write-AutoDerivaLog "INFO" "DownloadCucoAndExit flag set. Exiting after Cuco download." "Cyan"
 
+            $Script:Stats.EndTime = Get-Date
+            $total = New-TimeSpan -Start $Script:Stats.StartTime -End $Script:Stats.EndTime
+
             Write-Section "Completion"
-            $Duration = New-TimeSpan -Start $Script:Stats.StartTime -End (Get-Date)
-            Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $($Duration.ToString('hh\:mm\:ss'))." "Green"
+            Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $(Format-AutoDerivaDuration -Duration $total)." "Green"
 
             Write-Section "Statistics"
+            Write-AutoDerivaStatText -Label 'Finish Time' -Value ($Script:Stats.EndTime.ToString('yyyy-MM-dd HH:mm:ss')) -Color 'Gray'
+            Write-AutoDerivaStatText -Label 'Total Elapsed' -Value (Format-AutoDerivaDuration -Duration $total) -Color 'Gray'
             Write-AutoDerivaStat -Label 'Cuco Downloaded' -Value $Script:Stats.CucoDownloaded -Color 'Green'
             Write-AutoDerivaStat -Label 'Cuco Failed' -Value $Script:Stats.CucoDownloadFailed -Color 'Red'
             Write-AutoDerivaStat -Label 'Cuco Skipped' -Value $Script:Stats.CucoSkipped -Color 'Gray'
+
+            # Finalize and print section timings
+            try {
+                Complete-AutoDerivaSectionTiming -Now $Script:Stats.EndTime
+                if ($Script:SectionTimings.Count -gt 0) {
+                    Write-Section 'Section Timings'
+                    foreach ($rec in $Script:SectionTimings) {
+                        if (-not $rec) { continue }
+                        $label = [string]$rec.Title
+                        $elapsed = [TimeSpan]$rec.Elapsed
+                        Write-AutoDerivaStatText -Label $label -Value (Format-AutoDerivaDuration -Duration $elapsed) -Color 'Gray'
+                    }
+                }
+            }
+            catch {
+                Write-Verbose "Failed to print section timings: $_"
+            }
             return
         }
 
@@ -2313,11 +2472,19 @@ function Main {
             Write-AutoDerivaLog "INFO" "Temporary files removed." "Green"
         }
 
+        # Optional Wi-Fi cleanup at end (default enabled)
+        Write-Section 'Wi-Fi Cleanup'
+        Clear-WifiProfile
+
+        $Script:Stats.EndTime = Get-Date
+        $total = New-TimeSpan -Start $Script:Stats.StartTime -End $Script:Stats.EndTime
+
         Write-Section "Completion"
-        $Duration = New-TimeSpan -Start $Script:Stats.StartTime -End (Get-Date)
-        Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $($Duration.ToString('hh\:mm\:ss'))." "Green"
+        Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $(Format-AutoDerivaDuration -Duration $total)." "Green"
         
         Write-Section "Statistics"
+        Write-AutoDerivaStatText -Label 'Finish Time' -Value ($Script:Stats.EndTime.ToString('yyyy-MM-dd HH:mm:ss')) -Color 'Gray'
+        Write-AutoDerivaStatText -Label 'Total Elapsed' -Value (Format-AutoDerivaDuration -Duration $total) -Color 'Gray'
         Write-AutoDerivaStat -Label 'Cuco Downloaded' -Value $Script:Stats.CucoDownloaded -Color 'Green'
         Write-AutoDerivaStat -Label 'Cuco Failed' -Value $Script:Stats.CucoDownloadFailed -Color 'Red'
         Write-AutoDerivaStat -Label 'Cuco Skipped' -Value $Script:Stats.CucoSkipped -Color 'Gray'
@@ -2332,6 +2499,23 @@ function Main {
         Write-AutoDerivaStat -Label 'Unknown Drivers' -Value $Script:Stats.UnknownDriversAfterInstall -Color 'Yellow'
         Write-AutoDerivaStat -Label 'Reboots Required' -Value $Script:Stats.RebootsRequired -Color 'Yellow'
 
+        # Finalize and print section timings
+        try {
+            Complete-AutoDerivaSectionTiming -Now $Script:Stats.EndTime
+            if ($Script:SectionTimings.Count -gt 0) {
+                Write-Section 'Section Timings'
+                foreach ($rec in $Script:SectionTimings) {
+                    if (-not $rec) { continue }
+                    $label = [string]$rec.Title
+                    $elapsed = [TimeSpan]$rec.Elapsed
+                    Write-AutoDerivaStatText -Label $label -Value (Format-AutoDerivaDuration -Duration $elapsed) -Color 'Gray'
+                }
+            }
+        }
+        catch {
+            Write-Verbose "Failed to print section timings: $_"
+        }
+
         if ($InstallResults.Count -gt 0) {
             Write-Section "Detailed Summary"
             $InstallResults | Format-Table -AutoSize | Out-String | Write-Host -ForegroundColor White
@@ -2343,9 +2527,6 @@ function Main {
         if ($LogFilePath) {
             Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
         }
-
-        # Optional Wi-Fi cleanup at end (default enabled)
-        Clear-WifiProfile
 
     }
     catch {
