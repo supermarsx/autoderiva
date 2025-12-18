@@ -2531,9 +2531,15 @@ function Main {
         # Install Drivers
         $InstallResults = Install-Driver -DriverMatches $DriverMatches -TempDir $TempDir
 
-        # Compute unknown driver count after install attempt
+        # Compute unknown driver count after install attempt.
+        # This can be slow on some systems; only rescan when we actually installed drivers.
         if ($env:AUTODERIVA_TEST -ne '1') {
-            $Script:Stats.UnknownDriversAfterInstall = Get-UnknownDriverDeviceCount
+            if ($Script:Stats.DriversInstalled -gt 0) {
+                $Script:Stats.UnknownDriversAfterInstall = Get-UnknownDriverDeviceCount
+            }
+            else {
+                Write-AutoDerivaLog 'INFO' 'Skipping post-install device rescan (no drivers were installed).' 'Gray'
+            }
         }
 
         # Cleanup
