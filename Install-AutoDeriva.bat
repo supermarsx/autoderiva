@@ -43,7 +43,6 @@ REM This approach preserves argument forwarding reliably (even for args starting
 REM  1) Download/copy the installer to a temp .ps1
 REM  2) Invoke PowerShell with -File <temp.ps1> %*
 set "TMP_PS1=%TEMP%\AutoDeriva_Install_%RANDOM%%RANDOM%.ps1"
-set "RUN_PS1=%TMP_PS1%"
 set "_AUTODERIVA_USING_TEMP=1"
 
 REM If launched via Explorer (cmd.exe /c), keep elevated PowerShell windows open
@@ -63,16 +62,6 @@ if defined AUTODERIVA_BAT_DEBUG (
   if defined AUTODERIVA_NOEXIT echo [DEBUG] AUTODERIVA_NOEXIT=%AUTODERIVA_NOEXIT%
   "%PS_EXE%" -NoProfile -Command "$PSVersionTable.PSVersion.ToString(); $PSVersionTable.PSEdition" 2>nul
 )
-
-REM If a local script path is available, run it directly (no temp copy/download).
-if defined AUTODERIVA_SCRIPT_PATH (
-  if exist "%AUTODERIVA_SCRIPT_PATH%" (
-    set "RUN_PS1=%AUTODERIVA_SCRIPT_PATH%"
-    set "_AUTODERIVA_USING_TEMP=0"
-  )
-)
-
-if "%_AUTODERIVA_USING_TEMP%"=="0" goto :run
 
 "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; $out=$env:TMP_PS1; if (-not $out) { throw 'TMP_PS1 not set' }; if ($p -and (Test-Path -LiteralPath $p)) { Copy-Item -LiteralPath $p -Destination $out -Force } else { Invoke-WebRequest -Uri $u -OutFile $out -UseBasicParsing -ErrorAction Stop } } catch { Write-Error $_; exit 1 }"
 if not %ERRORLEVEL%==0 (
@@ -102,9 +91,9 @@ REM Optional: keep the (non-elevated) PowerShell host open after script ends.
 REM NOTE: Do NOT enable this implicitly, otherwise CI/runtime tests can hang.
 REM - AUTODERIVA_BAT_NOEXIT=1 forces -NoExit for the PowerShell host.
 if defined AUTODERIVA_BAT_NOEXIT (
-  "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -NoExit -File "%RUN_PS1%" %*
+  "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -NoExit -File "%TMP_PS1%" %*
 ) else (
-  "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%RUN_PS1%" %*
+  "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS1%" %*
 )
 set "RC=%ERRORLEVEL%"
 if defined AUTODERIVA_BAT_KEEP_TEMP (
@@ -112,7 +101,7 @@ if defined AUTODERIVA_BAT_KEEP_TEMP (
   echo NOTE: Keeping temp installer script for troubleshooting:
   echo %TMP_PS1%
 ) else (
-  if "%_AUTODERIVA_USING_TEMP%"=="1" del "%TMP_PS1%" >nul 2>nul
+  del "%TMP_PS1%" >nul 2>nul
 )
 call :maybe_pause
 exit /b %RC%
