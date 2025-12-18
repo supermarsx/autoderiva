@@ -100,10 +100,6 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; WifiCleanupMode = 'All' }
         $config.WifiCleanupMode | Should -Be 'All'
 
-        # Backward-compatible alias is accepted by CLI ValidateSet
-        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; WifiCleanupMode = 'NullOnly' }
-        $config.WifiCleanupMode | Should -Be 'NullOnly'
-
         $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; WifiProfileNameToDelete = 'MyHotspot' }
         $config.WifiProfileNameToDelete | Should -Be 'MyHotspot'
     }

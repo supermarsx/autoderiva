@@ -56,8 +56,8 @@ param(
     [Alias('WifiCleanupAndExit', 'WifiOnly')][switch]$ClearWifiAndExit,
     [switch]$ClearWifiProfiles,
     [Alias('NoClearWifiProfiles')][switch]$NoWifiCleanup,
-    # WifiCleanupMode: prefer SingleOnly (delete only WifiProfileNameToDelete). NullOnly is kept as a backward-compatible alias.
-    [ValidateSet('SingleOnly', 'All', 'None', 'NullOnly')][string]$WifiCleanupMode,
+    # WifiCleanupMode: SingleOnly (delete only WifiProfileNameToDelete), All, or None.
+    [ValidateSet('SingleOnly', 'All', 'None')][string]$WifiCleanupMode,
     [Alias('WifiName', 'WifiProfileName')][string]$WifiProfileNameToDelete,
     [switch]$AskBeforeClearingWifiProfiles,
     [switch]$NoAskBeforeClearingWifiProfiles,
@@ -1150,7 +1150,7 @@ function Clear-WifiProfile {
     #     Enumerates Wi-Fi profiles using `netsh wlan show profiles` and deletes profiles
     #     using `netsh wlan delete profile`. Behavior is controlled by config:
     #     - ClearWifiProfiles (master enable)
-    #     - WifiCleanupMode: SingleOnly|All|None (NullOnly accepted as legacy alias)
+    #     - WifiCleanupMode: SingleOnly|All|None
     #     - WifiProfileNameToDelete (used by SingleOnly)
     #     - AskBeforeClearingWifiProfiles (optional confirmation)
     #
@@ -1173,9 +1173,6 @@ function Clear-WifiProfile {
     try { $ask = [bool]$Config.AskBeforeClearingWifiProfiles } catch { $ask = $false }
     try { if ($Config.WifiCleanupMode) { $mode = [string]$Config.WifiCleanupMode } } catch { $mode = 'SingleOnly' }
     try { if ($Config.WifiProfileNameToDelete) { $targetName = [string]$Config.WifiProfileNameToDelete } } catch { $targetName = 'Null' }
-
-    # Backward-compatible alias
-    if ($mode -eq 'NullOnly') { $mode = 'SingleOnly' }
 
     if (-not $enabled) { return }
     if ($mode -eq 'None') { return }
