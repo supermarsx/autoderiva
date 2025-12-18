@@ -15,6 +15,9 @@ jobs:
       - name: Run Format Check
         shell: pwsh
         run: .\dev-scripts\Format-Check.ps1
+      - name: Batch Format Check
+        shell: pwsh
+        run: .\dev-scripts\Batch-Check.ps1 -Mode Format
 
   lint:
     name: Lint Check
@@ -24,6 +27,9 @@ jobs:
       - name: Run Lint Check
         shell: pwsh
         run: .\dev-scripts\Lint-Check.ps1
+      - name: Batch Lint Check
+        shell: pwsh
+        run: .\dev-scripts\Batch-Check.ps1 -Mode Lint
 
   test:
     name: Test Check
@@ -37,3 +43,16 @@ jobs:
       - name: Run Tests
         shell: pwsh
         run: .\dev-scripts\Test-Check.ps1
+      - name: Batch Runtime Test
+        shell: pwsh
+        run: .\dev-scripts\Batch-Check.ps1 -Mode Test
+
+  publish_installers:
+    name: Publish Installers Release
+    needs: [format, lint, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/publish-installers.yml
+    with:
+      event_name: ${{ github.event_name }}
+      before: ${{ github.event.before }}
+    secrets: inherit

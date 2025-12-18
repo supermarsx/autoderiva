@@ -1,11 +1,30 @@
 name: Publish Installers
 
 on:
+  workflow_call:
+    inputs:
+      force:
+        description: 'Force publishing even if no diffs'
+        required: false
+        type: boolean
+        default: false
+      event_name:
+        description: 'Caller event name (e.g. push)'
+        required: false
+        type: string
+        default: ''
+      before:
+        description: 'Caller before SHA (push event)'
+        required: false
+        type: string
+        default: ''
   workflow_dispatch:
-  push:
-    branches: ["main"]
-    paths:
-      - "Install-AutoDeriva.bat"
+    inputs:
+      force:
+        description: 'Force publishing even if no diffs'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -17,10 +36,62 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to publish
+        id: decide
+        shell: pwsh
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $force = '${{ inputs.force }}'
+          $force = $force -eq 'true'
+
+          $callerEvent = '${{ inputs.event_name }}'
+          if ([string]::IsNullOrWhiteSpace($callerEvent)) { $callerEvent = '${{ github.event_name }}' }
+
+          $before = '${{ inputs.before }}'
+          if ([string]::IsNullOrWhiteSpace($before)) { $before = '${{ github.event.before }}' }
+
+          $sha = '${{ github.sha }}'
+
+          $batChanged = $false
+          if ($callerEvent -eq 'push' -and -not [string]::IsNullOrWhiteSpace($before) -and $before -ne '0000000000000000000000000000000000000000') {
+            $names = git diff --name-only $before $sha
+            if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
+            $batChanged = $names -contains 'Install-AutoDeriva.bat'
+          } else {
+            # For manual runs (or unusual events), fall back to checking whether BAT differs from HEAD~1.
+            try {
+              $names = git diff --name-only HEAD~1 HEAD
+              $batChanged = $names -contains 'Install-AutoDeriva.bat'
+            } catch {
+              $batChanged = $true
+            }
+          }
+
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $uri = "https://api.github.com/repos/$env:GH_REPO/releases?per_page=100"
+          $releases = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers
+          $installerReleases = @($releases | Where-Object { $_.tag_name -like 'installers-*' })
+          $hasAnyInstallerRelease = $installerReleases.Count -gt 0
+
+          $shouldPublish = $force -or $batChanged -or (-not $hasAnyInstallerRelease)
+
+          "bat_changed=$batChanged" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "has_any_installer_release=$hasAnyInstallerRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "should_publish=$shouldPublish" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          Write-Host "batChanged=$batChanged hasAnyInstallerRelease=$hasAnyInstallerRelease force=$force => shouldPublish=$shouldPublish"
 
       - name: Compute release tag
         id: meta
         shell: pwsh
+        if: steps.decide.outputs.should_publish == 'True'
         run: |
           $ts = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
           $sha = '${{ github.sha }}'
@@ -31,14 +102,18 @@ jobs:
 
       - name: Prepare release assets
         shell: pwsh
+        if: steps.decide.outputs.should_publish == 'True'
         run: .\dev-scripts\Prepare-InstallersRelease.ps1
 
       - name: Publish numbered Release (mark latest)
         uses: softprops/action-gh-release@v2
+        if: steps.decide.outputs.should_publish == 'True'
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.name }}
           target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: false
           body_path: dist/release-notes.md
           files: |
             dist/Install-AutoDeriva.bat
@@ -46,3 +121,42 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prune older installer releases (keep 5)
+        if: steps.decide.outputs.should_publish == 'True'
+        shell: pwsh
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $base = "https://api.github.com/repos/$env:GH_REPO"
+
+          $releases = Invoke-RestMethod -Method Get -Uri "$base/releases?per_page=100" -Headers $headers
+          $installer = @($releases | Where-Object { $_.tag_name -like 'installers-*' } | Sort-Object -Property created_at -Descending)
+
+          if ($installer.Count -le 5) {
+            Write-Host "Installer releases: $($installer.Count). Nothing to prune."
+            return
+          }
+
+          $toDelete = $installer | Select-Object -Skip 5
+          Write-Host "Pruning $($toDelete.Count) installer release(s), keeping 5."
+
+          foreach ($rel in $toDelete) {
+            $id = $rel.id
+            $tag = $rel.tag_name
+
+            Write-Host "Deleting release id=$id tag=$tag"
+            Invoke-RestMethod -Method Delete -Uri "$base/releases/$id" -Headers $headers
+
+            # Best-effort cleanup of tag ref; ignore if missing
+            $tagPath = $tag -replace '#','%23'
+            try {
+              Invoke-RestMethod -Method Delete -Uri "$base/git/refs/tags/$tagPath" -Headers $headers
+            } catch {
+              Write-Host "Tag delete skipped/failed for $tag: $($_.Exception.Message)"
+            }
+          }
