@@ -60,6 +60,10 @@ if not %ERRORLEVEL%==0 (
   exit /b %ERRORLEVEL%
 )
 
+REM Normalize encoding: strip UTF-8 BOM if present so leading comment lines are always treated as comments.
+REM (Some PowerShell hosts can choke on BOM and treat the first token as "﻿#".)
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $b=[System.IO.File]::ReadAllBytes($env:TMP_PS1); if ($b.Length -ge 3 -and $b[0]-eq 0xEF -and $b[1]-eq 0xBB -and $b[2]-eq 0xBF) { [System.IO.File]::WriteAllBytes($env:TMP_PS1, $b[3..($b.Length-1)]) } } catch { Write-Warning ('BOM strip failed: ' + $_.Exception.Message) }"
+
 if defined AUTODERIVA_BAT_DEBUG (
   echo [DEBUG] First bytes of downloaded script:
   "%PS_EXE%" -NoProfile -Command "Format-Hex -Path $env:TMP_PS1 -Count 16" 2>nul
@@ -67,7 +71,18 @@ if defined AUTODERIVA_BAT_DEBUG (
   "%PS_EXE%" -NoProfile -Command "Get-Content -LiteralPath $env:TMP_PS1 -TotalCount 1" 2>nul
 )
 
-"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS1%" %*
+REM Optional: keep PowerShell host open after script ends (useful when the installer errors immediately).
+REM - AUTODERIVA_BAT_NOEXIT=1 forces -NoExit for the PowerShell host.
+set "_AUTODERIVA_PS_NOEXIT="
+if defined AUTODERIVA_BAT_NOEXIT set "_AUTODERIVA_PS_NOEXIT=1"
+if defined AUTODERIVA_BAT_DEBUG set "_AUTODERIVA_PS_NOEXIT=1"
+if defined _AUTODERIVA_PAUSE set "_AUTODERIVA_PS_NOEXIT=1"
+
+if defined _AUTODERIVA_PS_NOEXIT (
+  "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -NoExit -File "%TMP_PS1%" %*
+) else (
+  "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS1%" %*
+)
 set "RC=%ERRORLEVEL%"
 if defined AUTODERIVA_BAT_KEEP_TEMP (
   echo.
