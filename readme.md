@@ -8,7 +8,7 @@
 ![Driver Count](https://img.shields.io/badge/Drivers-163+-blue?style=flat-square)
 [![Documentation](https://img.shields.io/badge/Docs-Configuration-blue?style=flat-square)](docs/configuration.md)
 [![Download BAT](https://img.shields.io/badge/Download-Install--AutoDeriva.bat-blue?style=flat-square)](https://raw.githubusercontent.com/supermarsx/autoderiva/refs/heads/main/Install-AutoDeriva.bat)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](license.md)
 
 
 **AutoDeriva** is a powerful, automated system setup and driver installer designed for remote and hybrid environments. It intelligently scans your system's hardware, matches it against a remote inventory of drivers, and automatically downloads and installs the necessary components.
