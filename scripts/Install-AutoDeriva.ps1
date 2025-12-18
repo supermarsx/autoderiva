@@ -1034,16 +1034,21 @@ function Write-BrandHeader {
 # .PARAMETER Title
 #     The title of the section.
 function Write-Section {
-    param([string]$Title)
+    param(
+        [string]$Title,
+        [switch]$NoTiming
+    )
 
-    try {
-        $now = Get-Date
-        Complete-AutoDerivaSectionTiming -Now $now
-        $Script:CurrentSectionTitle = $Title
-        $Script:CurrentSectionStart = $now
-    }
-    catch {
-        Write-Verbose "Section timing update failed: $_"
+    if (-not $NoTiming) {
+        try {
+            $now = Get-Date
+            Complete-AutoDerivaSectionTiming -Now $now
+            $Script:CurrentSectionTitle = $Title
+            $Script:CurrentSectionStart = $now
+        }
+        catch {
+            Write-Verbose "Section timing update failed: $_"
+        }
     }
 
     Write-Host "`n   [$Title]" -ForegroundColor $Script:ColorHeader
@@ -2404,8 +2409,6 @@ function Main {
             Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $(Format-AutoDerivaDuration -Duration $total)." "Green"
 
             Write-Section "Statistics"
-            Write-AutoDerivaStatText -Label 'Finish Time' -Value ($Script:Stats.EndTime.ToString('yyyy-MM-dd HH:mm:ss')) -Color 'Gray'
-            Write-AutoDerivaStatText -Label 'Total Elapsed' -Value (Format-AutoDerivaDuration -Duration $total) -Color 'Gray'
             Write-AutoDerivaStat -Label 'Cuco Downloaded' -Value $Script:Stats.CucoDownloaded -Color 'Green'
             Write-AutoDerivaStat -Label 'Cuco Failed' -Value $Script:Stats.CucoDownloadFailed -Color 'Red'
             Write-AutoDerivaStat -Label 'Cuco Skipped' -Value $Script:Stats.CucoSkipped -Color 'Gray'
@@ -2413,12 +2416,16 @@ function Main {
             # Finalize and print section timings
             try {
                 Complete-AutoDerivaSectionTiming -Now $Script:Stats.EndTime
+                $Script:CurrentSectionTitle = $null
+                $Script:CurrentSectionStart = $null
                 if ($Script:SectionTimings.Count -gt 0) {
-                    Write-Section 'Section Timings'
+                    Write-Section 'Section Timings' -NoTiming
                     foreach ($rec in $Script:SectionTimings) {
                         if (-not $rec) { continue }
                         $label = [string]$rec.Title
                         $elapsed = [TimeSpan]$rec.Elapsed
+                        if ($label -eq 'Wi-Fi Cleanup') { continue }
+                        if ($elapsed.TotalSeconds -lt 1) { continue }
                         Write-AutoDerivaStatText -Label $label -Value (Format-AutoDerivaDuration -Duration $elapsed) -Color 'Gray'
                     }
                 }
@@ -2483,8 +2490,6 @@ function Main {
         Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $(Format-AutoDerivaDuration -Duration $total)." "Green"
         
         Write-Section "Statistics"
-        Write-AutoDerivaStatText -Label 'Finish Time' -Value ($Script:Stats.EndTime.ToString('yyyy-MM-dd HH:mm:ss')) -Color 'Gray'
-        Write-AutoDerivaStatText -Label 'Total Elapsed' -Value (Format-AutoDerivaDuration -Duration $total) -Color 'Gray'
         Write-AutoDerivaStat -Label 'Cuco Downloaded' -Value $Script:Stats.CucoDownloaded -Color 'Green'
         Write-AutoDerivaStat -Label 'Cuco Failed' -Value $Script:Stats.CucoDownloadFailed -Color 'Red'
         Write-AutoDerivaStat -Label 'Cuco Skipped' -Value $Script:Stats.CucoSkipped -Color 'Gray'
@@ -2502,12 +2507,16 @@ function Main {
         # Finalize and print section timings
         try {
             Complete-AutoDerivaSectionTiming -Now $Script:Stats.EndTime
+            $Script:CurrentSectionTitle = $null
+            $Script:CurrentSectionStart = $null
             if ($Script:SectionTimings.Count -gt 0) {
-                Write-Section 'Section Timings'
+                Write-Section 'Section Timings' -NoTiming
                 foreach ($rec in $Script:SectionTimings) {
                     if (-not $rec) { continue }
                     $label = [string]$rec.Title
                     $elapsed = [TimeSpan]$rec.Elapsed
+                    if ($label -eq 'Wi-Fi Cleanup') { continue }
+                    if ($elapsed.TotalSeconds -lt 1) { continue }
                     Write-AutoDerivaStatText -Label $label -Value (Format-AutoDerivaDuration -Duration $elapsed) -Color 'Gray'
                 }
             }
