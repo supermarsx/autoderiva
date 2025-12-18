@@ -662,7 +662,7 @@ function Write-AutoDerivaStat {
     try {
         Write-Host "   [" -NoNewline -ForegroundColor $Script:ColorDim
         Write-Host "STAT" -NoNewline -ForegroundColor $Color
-        Write-Host "] {0} : {1}" -f $Label, $Value -ForegroundColor $Script:ColorText
+        Write-Host ("] {0} : {1}" -f $Label, $Value) -ForegroundColor $Script:ColorText
     }
     catch {
         # Fallback for constrained hosts
@@ -672,7 +672,7 @@ function Write-AutoDerivaStat {
     if ($LogFilePath) {
         try {
             $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            Add-Content -Path $LogFilePath -Value "[$timestamp] [INFO] {0} : {1}" -f $Label, $Value -ErrorAction SilentlyContinue
+            Add-Content -Path $LogFilePath -Value ("[$timestamp] [INFO] {0} : {1}" -f $Label, $Value) -ErrorAction SilentlyContinue
         }
         catch {
             Write-Verbose "Failed to write stat to log file: $_"
@@ -2488,6 +2488,9 @@ function Main {
 
         Write-Section "Completion"
         Write-AutoDerivaLog "DONE" "AutoDeriva process completed in $(Format-AutoDerivaDuration -Duration $total)." "Green"
+        if ($LogFilePath) {
+            Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
+        }
         
         Write-Section "Statistics"
         Write-AutoDerivaStat -Label 'Cuco Downloaded' -Value $Script:Stats.CucoDownloaded -Color 'Green'
@@ -2531,10 +2534,6 @@ function Main {
             if ($LogFilePath) {
                 $InstallResults | Format-Table -AutoSize | Out-String | Add-Content -Path $LogFilePath
             }
-        }
-
-        if ($LogFilePath) {
-            Write-AutoDerivaLog "INFO" "Log saved to: $LogFilePath" "Gray"
         }
 
     }
