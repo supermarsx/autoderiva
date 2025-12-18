@@ -18,15 +18,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Compute release tag
+        id: meta
+        shell: pwsh
+        run: |
+          $ts = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
+          $sha = '${{ github.sha }}'
+          $short = if ($sha.Length -ge 8) { $sha.Substring(0,8) } else { $sha }
+          $tag = "installers-$ts-$short"
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "name=Installers $ts" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Prepare release assets
         shell: pwsh
         run: .\dev-scripts\Prepare-InstallersRelease.ps1
 
-      - name: Publish/Update Release (installers)
+      - name: Publish numbered Release (mark latest)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: installers
-          name: Installers
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          target_commitish: ${{ github.sha }}
           body_path: dist/release-notes.md
           files: |
             dist/Install-AutoDeriva.bat
