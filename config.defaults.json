@@ -30,5 +30,6 @@
     "WifiCleanupMode": "SingleOnly",
     "WifiProfileNameToDelete": "Null",
     "AutoExitWithoutConfirmation": false,
-    "ShowOnlyNonZeroStats": true
+    "ShowOnlyNonZeroStats": true,
+    "ShowBanner": true
 }

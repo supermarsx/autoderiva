@@ -146,6 +146,17 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config.AutoExitWithoutConfirmation | Should -BeFalse
     }
 
+    It 'Respects -NoBanner and -ShowBanner toggles' {
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true }
+        $config.ShowBanner | Should -BeTrue
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoBanner = $true }
+        $config.ShowBanner | Should -BeFalse
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; NoBanner = $true; ShowBanner = $true }
+        $config.ShowBanner | Should -BeTrue
+    }
+
     It 'Counts failed file downloads in TestMode' {
         Write-Host "TEST: Counts failed file downloads in TestMode"
         $scriptFile = Join-Path (Resolve-Path "$PSScriptRoot\..").Path 'scripts\Install-AutoDeriva.ps1'

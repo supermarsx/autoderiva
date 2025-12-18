@@ -73,6 +73,10 @@ param(
     [switch]$AutoExitWithoutConfirmation,
     [switch]$RequireExitConfirmation,
 
+    # Banner / UI
+    [switch]$ShowBanner,
+    [switch]$NoBanner,
+
     # Stats display
     [switch]$ShowOnlyNonZeroStats,
     [switch]$ShowAllStats,
@@ -142,6 +146,19 @@ $Script:RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ConfigDefaultsFile = Join-Path $Script:RepoRoot "config.defaults.json"
 $ConfigFile = Join-Path $Script:RepoRoot "config.json"
 
+function Write-AutoDerivaBanner {
+    try {
+        Write-Host ''
+        Write-Host '========================================' -ForegroundColor Cyan
+        Write-Host ' AutoDeriva - System Setup & Driver Tool ' -ForegroundColor Cyan
+        Write-Host '========================================' -ForegroundColor Cyan
+        Write-Host ''
+    }
+    catch {
+        Write-Verbose "Failed to print banner: $_"
+    }
+}
+
 # ---------------------------------------------------------------------------
 # 2. CONFIGURATION & LOGGING
 # ---------------------------------------------------------------------------
@@ -181,6 +198,7 @@ $DefaultConfig = @{
     WifiProfileNameToDelete       = 'Null'
     AutoExitWithoutConfirmation   = $false
     ShowOnlyNonZeroStats          = $true
+    ShowBanner                    = $true
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -365,6 +383,10 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('AutoExitWithoutConfirmation')) { $Config.AutoExitWithoutConfirmation = $true }
     if ($PSBoundParameters.ContainsKey('RequireExitConfirmation')) { $Config.AutoExitWithoutConfirmation = $false }
 
+    # Banner / UI toggles
+    if ($PSBoundParameters.ContainsKey('ShowBanner')) { $Config.ShowBanner = $true }
+    if ($PSBoundParameters.ContainsKey('NoBanner')) { $Config.ShowBanner = $false }
+
     # Stats display toggles
     if ($PSBoundParameters.ContainsKey('ShowOnlyNonZeroStats')) { $Config.ShowOnlyNonZeroStats = $true }
     if ($PSBoundParameters.ContainsKey('ShowAllStats')) { $Config.ShowOnlyNonZeroStats = $false }
@@ -428,6 +450,9 @@ Options:
 
     -AutoExitWithoutConfirmation Exit without waiting at end (default from config: $($Config.AutoExitWithoutConfirmation)).
     -RequireExitConfirmation     Force waiting at end (default: disabled).
+
+    -ShowBanner                 Force printing the startup banner (default from config: $($Config.ShowBanner)).
+    -NoBanner                   Disable printing the startup banner (default: disabled).
 
     -ShowOnlyNonZeroStats        Only show counters above 0 in Statistics (default from config: $($Config.ShowOnlyNonZeroStats)).
     -ShowAllStats                Show all counters including zeros (default: disabled).
@@ -2071,6 +2096,10 @@ function Main {
     #     None.
     $Script:HadFatalError = $false
     try {
+        if ($Config.ShowBanner) {
+            Write-AutoDerivaBanner
+        }
+
         if ($Script:ExitAfterWifiCleanup) {
             Write-Section 'Wi-Fi Cleanup'
             Clear-WifiProfile
