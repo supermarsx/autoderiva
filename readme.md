@@ -7,7 +7,7 @@
 ![Repo Size](https://img.shields.io/github/repo-size/supermarsx/autoderiva?style=flat-square)
 ![Driver Count](https://img.shields.io/badge/Drivers-163+-blue?style=flat-square)
 [![Documentation](https://img.shields.io/badge/Docs-Configuration-blue?style=flat-square)](docs/configuration.md)
-[![Download BAT](https://img.shields.io/badge/Download-Install--AutoDeriva.bat-blue?style=flat-square)](https://raw.githubusercontent.com/supermarsx/autoderiva/refs/heads/main/Install-AutoDeriva.bat)
+[![Download BAT](https://img.shields.io/badge/Download-Install--AutoDeriva.bat-blue?style=flat-square)](https://github.com/supermarsx/autoderiva/releases/latest/download/Install-AutoDeriva.bat)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](license.md)
 
 
@@ -15,17 +15,25 @@
 
 ## 🚀 Quick Start
 
-Run the installer directly from PowerShell with this one-liner:
+Fastest (PowerShell one-liner):
 
 ```powershell
 irm https://raw.githubusercontent.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva.ps1 | iex
 ```
 
-Windows portable batch launcher (downloads + runs the installer):
+Recommended (Windows portable batch launcher that downloads + runs the installer and forwards arguments):
 
 ```bat
-curl -L -o Install-AutoDeriva.bat https://raw.githubusercontent.com/supermarsx/autoderiva/main/Install-AutoDeriva.bat
+curl -L -o Install-AutoDeriva.bat https://github.com/supermarsx/autoderiva/releases/latest/download/Install-AutoDeriva.bat
 Install-AutoDeriva.bat
+```
+
+Useful quick commands:
+
+```bat
+Install-AutoDeriva.bat -Help
+Install-AutoDeriva.bat -ShowConfig
+Install-AutoDeriva.bat -DryRun
 ```
 
 ### Download only (save the script locally)
@@ -50,7 +58,17 @@ powershell -ExecutionPolicy Bypass -File .\Install-AutoDeriva.ps1
 pwsh -File ./Install-AutoDeriva.ps1
 ```
 
-## 🎚️ Configuration file
+## ✨ Features
+
+*   **Smart driver matching**: matches by Hardware IDs; installs with `pnputil`.
+*   **Safe-by-default scanning**: defaults to scanning only devices missing drivers (PnP ProblemCode `28`).
+*   **Resilient downloads**: retry + backoff and a concurrency-safe downloader.
+*   **Layered configuration**: built-in defaults → `config.defaults.json` → `config.json` → optional remote overrides → CLI.
+*   **Wi‑Fi cleanup options**: conservative default (delete a single profile name) and a Wi‑Fi-only mode.
+*   **Cleaner output**: Statistics hide zero counters by default (configurable).
+*   **Test-friendly**: set `AUTODERIVA_TEST=1` to skip elevation and destructive prompts in CI/tests.
+
+## 🎚️ Configuration
 
 AutoDeriva loads configuration in layers (later overrides earlier):
 
@@ -64,19 +82,21 @@ AutoDeriva loads configuration in layers (later overrides earlier):
 
 You can keep `config.json` minimal—only include keys you want to change.
 
-Example `config.json`:
+Example minimal `config.json` (override only what you need):
 
 ```json
 {
+    "RemoteConfigUrl": null,
     "MaxConcurrentDownloads": 2,
-    "SingleDownloadMode": false,
     "ScanOnlyMissingDrivers": true,
+    "ClearWifiProfiles": true,
     "WifiCleanupMode": "SingleOnly",
-    "WifiProfileNameToDelete": "Null"
+    "WifiProfileNameToDelete": "Null",
+    "ShowOnlyNonZeroStats": true
 }
 ```
 
-For a longer explanation and troubleshooting notes, see `docs/configuration.md`.
+For the full key reference (types, defaults, and notes), see `docs/configuration.md`.
 
 ### Configuration keys
 
@@ -112,44 +132,73 @@ For a longer explanation and troubleshooting notes, see `docs/configuration.md`.
 
 ## 🧭 CLI Options
 
-You can pass script-level arguments when running `Install-AutoDeriva.ps1` directly. Common flags:
+You can pass arguments either to `Install-AutoDeriva.ps1` or to `Install-AutoDeriva.bat` (the BAT forwards args to the script).
 
-* `-ConfigPath <path>` — Path to a custom `config.json` to override defaults.
-* `-ConfigUrl <url>` — Load JSON config overrides from a URL (also configurable via `RemoteConfigUrl` in `config.json`).
-* `-EnableLogging` — Enable logging (overrides config file setting).
-* `-CleanLogs` — Delete all `autoderiva-*.log` files in the `logs/` folder.
-* `-LogRetentionDays <n>` — Auto-delete logs older than `<n>` days (overrides config).
-* `-MaxLogFiles <n>` — Keep only the newest `<n>` logs (overrides config).
-* `-NoLogCleanup` — Disable automatic log cleanup (retention/max-files).
-* `-DownloadAllFiles` — Download all files from the manifest (overrides config file setting).
-* `-DownloadAllAndExit` (alias: `-DownloadOnly`) — Download all files from the manifest, then exit immediately (no installs). Useful to mirror `DownloadAllFiles` but only fetch files.
-* `-DownloadCuco` — Enable downloading the Cuco utility.
-* `-DownloadCucoAndExit` (alias: `-CucoOnly`) — Download Cuco only, print stats, then exit.
-* `-CucoTargetDir <path>` — Override where the Cuco utility will be written (defaults to `Desktop`).
-* `-SingleDownloadMode` — Force single-threaded downloads (equivalent to setting `SingleDownloadMode: true` in the config).
-* `-MaxConcurrentDownloads <n>` — Control number of parallel downloads (overrides `MaxConcurrentDownloads`).
+Run `-Help` for the authoritative list. Highlights:
+
+Configuration:
+
+* `-ConfigPath <path>` — Use a custom config file as overrides.
+* `-ConfigUrl <url>` — Load JSON config overrides from a URL (overrides `RemoteConfigUrl`).
+* `-ShowConfig` — Print the effective configuration and exit (also used by tests/tools).
+
+Logging:
+
+* `-EnableLogging` — Enable logging.
+* `-CleanLogs` — Delete ALL `autoderiva-*.log` files in the logs folder.
+* `-LogRetentionDays <n>` — Auto-delete logs older than `<n>` days.
+* `-MaxLogFiles <n>` — Keep only the newest `<n>` logs.
+* `-NoLogCleanup` — Disable automatic log cleanup.
+
+Download modes:
+
+* `-DownloadAllFiles` — Download all files from the manifest.
+* `-DownloadAllAndExit` (alias: `-DownloadOnly`) — Download all files then exit.
+* `-SingleDownloadMode` — Force single-threaded downloads.
+* `-MaxConcurrentDownloads <n>` — Control number of parallel downloads.
 * `-NoDiskSpaceCheck` — Skip the pre-flight disk space check.
-* `-ShowConfig` — Print the effective configuration and exit.
-* `-DryRun` — Perform a dry run (no downloads or installs performed; useful for testing).
-* `-Help` or `-?` — Show usage/help message and exit.
+
+Cuco:
+
+* `-DownloadCuco` — Download the Cuco utility.
+* `-DownloadCucoAndExit` (alias: `-CucoOnly`) — Download Cuco then exit.
+* `-CucoTargetDir <path>` — Override Cuco output directory.
+* `-AskBeforeDownloadCuco` / `-NoAskBeforeDownloadCuco` — Toggle prompt.
+
+Driver scan behavior:
+
+* `-ScanOnlyMissingDrivers` — Only scan devices missing drivers.
+* `-ScanAllDevices` — Scan all present devices.
+
+Wi‑Fi cleanup:
+
+* `-ClearWifiAndExit` (aliases: `-WifiCleanupAndExit`, `-WifiOnly`) — Only run Wi‑Fi cleanup and exit.
+* `-ClearWifiProfiles` — Enable Wi‑Fi cleanup at end.
+* `-NoWifiCleanup` (alias: `-NoClearWifiProfiles`) — Disable Wi‑Fi cleanup at end.
+* `-WifiCleanupMode <SingleOnly|All|None>` — Cleanup mode.
+* `-WifiProfileNameToDelete <name>` (aliases: `-WifiName`, `-WifiProfileName`) — Profile name used by `SingleOnly`.
+* `-AskBeforeClearingWifiProfiles` / `-NoAskBeforeClearingWifiProfiles` — Toggle prompt.
+
+End-of-run behavior:
+
+* `-AutoExitWithoutConfirmation` — Exit without waiting at end.
+* `-RequireExitConfirmation` — Force waiting at end.
+
+Output:
+
+* `-ShowOnlyNonZeroStats` — Only show counters above 0.
+* `-ShowAllStats` — Show all counters including zeros.
+
+Safety/testing:
+
+* `-DryRun` — Dry run (no downloads or installs).
+* `AUTODERIVA_TEST=1` — Environment variable used by tests/CI to skip elevation and interactive behaviors.
 
 Example:
 
 ```powershell
 .\Install-AutoDeriva.ps1 -EnableLogging -MaxConcurrentDownloads 2
 ```
-
-## ✨ Features
-
-*   **Smart Driver Matching**: Uses Hardware IDs to identify and install only the drivers your system needs.
-*   **Remote Inventory**: Fetches driver metadata and files from a remote repository, eliminating the need for a massive local driver store.
-*   **Auto-Elevation**: Automatically requests administrative privileges to ensure seamless installation.
-*   **Resilient Downloads**: Includes retry logic and exponential backoff for reliable file fetching.
-*   **Disk Space Checks**: Verifies sufficient disk space before starting downloads.
-*   **Detailed Logging**: Keeps a comprehensive log of all actions for troubleshooting (stored under `logs/`).
-*   **Log Retention**: Optional automatic cleanup of old logs by age and max file count.
-*   **Cuco Utility Integration**: Optionally downloads the Cuco utility (\CtoolGui.exe\) to the user's desktop.
-*   **Beautiful TUI**: Features a colorful, text-based user interface with progress bars and ASCII art.
 
 ## 💻 Supported Models
 
@@ -181,19 +230,6 @@ The repository hosts a wide range of drivers, including but not limited to:
     *   It uses \PnPUtil\ to install the drivers into the Windows Driver Store.
 6.  **Cleanup**: Temporary files are removed after installation.
 
-## ⚙️ Configuration
-
-Configuration options are documented in `docs/configuration.md`. The script loads defaults from `config.defaults.json` (remote or local) and applies overrides from `config.json` when present. See the docs for key descriptions, types, and examples.
-
-Note: log files are written to the `logs/` folder (gitignored). Cleanup behavior is controlled via `AutoCleanupLogs`, `LogRetentionDays`, and `MaxLogFiles`.
-
-## 🔧 Cuco Utility
-
-AutoDeriva can automatically download the **Cuco Utility** (\CtoolGui.exe\) to your Desktop. This behavior is configurable:
-
-*   **Enable/Disable**: Set \"DownloadCuco": false\ in your config to disable.
-*   **Target Directory**: Configure \"CucoTargetDir"\ to specify a custom download location (defaults to "Desktop").
-
 ## 📜 Scripts
 
 *   \Install-AutoDeriva.ps1\: The main installer script.
@@ -204,4 +240,4 @@ AutoDeriva can automatically download the **Cuco Utility** (\CtoolGui.exe\) to y
 
 ## 📄 License
 
-This project is distributed under the MIT License. See `LICENSE.md` for the full license text.
+This project is distributed under the MIT License. See `license.md` for the full license text.

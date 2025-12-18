@@ -1,0 +1,36 @@
+name: Publish Installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "Install-AutoDeriva.bat"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish BAT to Releases
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Prepare release assets
+        shell: pwsh
+        run: .\dev-scripts\Prepare-InstallersRelease.ps1
+
+      - name: Publish/Update Release (installers)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: installers
+          name: Installers
+          body_path: dist/release-notes.md
+          files: |
+            dist/Install-AutoDeriva.bat
+          overwrite_files: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
