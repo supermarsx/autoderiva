@@ -39,7 +39,10 @@ set "TMP_PS1=%TEMP%\AutoDeriva_Install_%RANDOM%%RANDOM%.ps1"
 REM If launched via Explorer (cmd.exe /c), keep elevated PowerShell windows open
 REM so errors are visible (the installer does auto-elevation).
 call :detect_pause
-if defined _AUTODERIVA_PAUSE set "AUTODERIVA_NOEXIT=1"
+if defined _AUTODERIVA_PAUSE (
+  set "AUTODERIVA_NOEXIT=1"
+  if not defined AUTODERIVA_BAT_NOEXIT set "AUTODERIVA_BAT_NOEXIT=1"
+)
 
 if defined AUTODERIVA_BAT_DEBUG (
   echo [DEBUG] PS_EXE=%PS_EXE%

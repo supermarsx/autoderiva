@@ -91,10 +91,29 @@ if ($env:AUTODERIVA_TEST -ne '1') {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         Write-Host "Requesting administrative privileges..." -ForegroundColor Yellow
         $noExit = ($env:AUTODERIVA_NOEXIT -eq '1')
-        $elevatedArgs = "-NoProfile -ExecutionPolicy Bypass "
-        if ($noExit) { $elevatedArgs += "-NoExit " }
-        $elevatedArgs += "-File `"$($MyInvocation.MyCommand.Definition)`""
-        Start-Process -FilePath "powershell.exe" -ArgumentList $elevatedArgs -Verb RunAs -PassThru | Out-Null
+        $elevatedArgList = @('-NoProfile', '-ExecutionPolicy', 'Bypass')
+        if ($noExit) { $elevatedArgList += '-NoExit' }
+        $elevatedArgList += @('-File', $MyInvocation.MyCommand.Definition)
+
+        # Preserve original CLI args for the elevated run.
+        # Prefer $PSBoundParameters (typed) so switches/values are reconstructed reliably.
+        foreach ($key in $PSBoundParameters.Keys) {
+            $value = $PSBoundParameters[$key]
+            if ($value -is [switch]) {
+                if ($value.IsPresent) { $elevatedArgList += "-$key" }
+                continue
+            }
+            if ($null -eq $value) {
+                continue
+            }
+            if ($value -is [bool]) {
+                $elevatedArgList += @("-$key", ([string]$value).ToLowerInvariant())
+                continue
+            }
+            $elevatedArgList += @("-$key", [string]$value)
+        }
+
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $elevatedArgList -Verb RunAs -PassThru | Out-Null
         exit
     }
 }
@@ -362,7 +381,7 @@ if ($PSBoundParameters.Count -gt 0) {
         # Write JSON to stdout with a stable prefix so it can be captured reliably by tools/tests
         $json = $Config | ConvertTo-Json -Depth 5
         Write-Output "AUTODERIVA::CONFIG::$json"
-        exit 0
+        return
     }
     
     # Print help and exit if requested
@@ -418,7 +437,7 @@ Options:
     -Help, -?                   Show this help message and exit.
 "@
         Write-Host $helpText
-        exit 0
+        return
     }
 }
 
@@ -531,11 +550,19 @@ function Wait-AutoDerivaExit {
     # .EXAMPLE
     #     Wait-AutoDerivaExit -AutoExit:$false
     param(
-        [switch]$AutoExit
+        [switch]$AutoExit,
+        [switch]$Force
     )
 
     if ($AutoExit) { return }
-    if (-not (Test-AutoDerivaPromptAvailable)) { return }
+    $promptOk = $false
+    try { $promptOk = (Test-AutoDerivaPromptAvailable) } catch { $promptOk = $false }
+    if (-not $promptOk -and -not $Force) { return }
+    if (-not $promptOk -and $Force) {
+        try { $null = Read-Host 'Press Enter to close this window...' }
+        catch { Write-Verbose "Read-Host failed in forced wait: $_" }
+        return
+    }
 
     $message = 'Press Enter to close this window (or Ctrl+C)...'
     try { Write-Host $message -ForegroundColor Gray } catch { Write-Verbose "Write-Host failed: $_" }
@@ -2042,6 +2069,7 @@ function Main {
     #
     # .OUTPUTS
     #     None.
+    $Script:HadFatalError = $false
     try {
         if ($Script:ExitAfterWifiCleanup) {
             Write-Section 'Wi-Fi Cleanup'
@@ -2147,6 +2175,7 @@ function Main {
 
     }
     catch {
+        $Script:HadFatalError = $true
         Write-AutoDerivaLog "FATAL" "An unexpected error occurred: $_" "Red"
         Write-AutoDerivaLog "FATAL" $($_.ScriptStackTrace) "Red"
     }
@@ -2155,7 +2184,9 @@ function Main {
         # Avoid interactive prompt during automated tests; allow Ctrl+C as alternative to Enter.
         $autoExit = $false
         try { $autoExit = [bool]$Config.AutoExitWithoutConfirmation } catch { $autoExit = $false }
-        Wait-AutoDerivaExit -AutoExit:$autoExit
+        $forceWait = ($env:AUTODERIVA_NOEXIT -eq '1')
+        if ($forceWait -and $Script:HadFatalError) { $autoExit = $false }
+        Wait-AutoDerivaExit -AutoExit:$autoExit -Force:($forceWait -and $Script:HadFatalError)
     }
 }
 
