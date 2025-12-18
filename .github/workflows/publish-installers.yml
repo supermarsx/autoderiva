@@ -4,24 +4,24 @@ on:
   workflow_call:
     inputs:
       force:
-        description: 'Force publishing even if no diffs'
+        description: "Force publishing even if no diffs"
         required: false
         type: boolean
         default: false
       event_name:
-        description: 'Caller event name (e.g. push)'
+        description: "Caller event name (e.g. push)"
         required: false
         type: string
-        default: ''
+        default: ""
       before:
-        description: 'Caller before SHA (push event)'
+        description: "Caller before SHA (push event)"
         required: false
         type: string
-        default: ''
+        default: ""
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force publishing even if no diffs'
+        description: "Force publishing even if no diffs"
         required: false
         type: boolean
         default: false

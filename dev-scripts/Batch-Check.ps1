@@ -26,12 +26,13 @@ function Invoke-BatFormatCheck {
 
     Assert-True (Test-Path -LiteralPath $Path) "BAT not found: $Path"
 
-    $raw = Get-Content -LiteralPath $Path -Raw -Encoding Byte
+    $raw = [System.IO.File]::ReadAllBytes($Path)
     Assert-True ($raw.Length -gt 0) 'BAT is empty.'
 
     # Ensure no UTF-16 / null bytes
     Assert-True (-not ($raw -contains 0)) 'BAT appears to contain NUL bytes (unexpected encoding like UTF-16). Save as ANSI/UTF-8 (no NULs).'
 
+    # Treat as UTF-8 text for checks; if the file is ANSI, bytes will still round-trip for ASCII characters.
     $text = [System.Text.Encoding]::UTF8.GetString($raw)
 
     # Enforce CRLF (no lone \n)
@@ -57,12 +58,13 @@ function Invoke-BatFormatCheck {
 function Invoke-BatLintCheck {
     param([string]$Path)
 
-    $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    $raw = [System.IO.File]::ReadAllBytes($Path)
+    $text = [System.Text.Encoding]::UTF8.GetString($raw)
 
     Assert-True ($text -match "(?m)^@echo off\s*$") 'BAT must start with @echo off.'
     Assert-True ($text -match "(?m)^setlocal EnableExtensions\s*$") 'BAT must use setlocal EnableExtensions.'
 
-    Assert-True ($text -match "(?m)^set \"SCRIPT_URL=https://raw\.githubusercontent\.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva\.ps1\"\s*$") 'BAT SCRIPT_URL must point to main scripts/Install-AutoDeriva.ps1 raw URL.'
+    Assert-True ($text -match '(?m)^set "SCRIPT_URL=https://raw\.githubusercontent\.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva\.ps1"\s*$') 'BAT SCRIPT_URL must point to main scripts/Install-AutoDeriva.ps1 raw URL.'
 
     Assert-True ($text -match "(?m)%\*\s*$") 'BAT must forward args using %*.'
     Assert-True ($text -match "(?m)^exit /b %ERRORLEVEL%\s*$") 'BAT must exit with %ERRORLEVEL%.'
@@ -83,7 +85,7 @@ function Invoke-BatRuntimeTest {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = 'cmd.exe'
     $psi.WorkingDirectory = $repoRoot
-    $psi.Arguments = "/c \"\"$Path\" -ShowConfig\""
+    $psi.Arguments = '/c ""' + $Path + '" -ShowConfig"'
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false

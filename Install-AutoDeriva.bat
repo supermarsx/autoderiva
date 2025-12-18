@@ -31,5 +31,5 @@ if not defined PS_EXE (
 
 REM NOTE: A literal `irm ... | iex` pattern doesn't support forwarding script parameters.
 REM This is the closest equivalent: load script text (from local file or via `irm`), then invoke the scriptblock with @args.
-"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; if ($p -and (Test-Path -LiteralPath $p)) { $s = Get-Content -LiteralPath $p -Raw } else { $s = [string](irm -Uri $u) }; & ([ScriptBlock]::Create([string]$s)) @args } catch { Write-Error $_; exit 1 }" %*
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; if ($p -and (Test-Path -LiteralPath $p)) { $s = Get-Content -LiteralPath $p -Raw } else { $s = [string](irm -Uri $u) }; & ([ScriptBlock]::Create([string]$s)) @args } catch { Write-Error $_; exit 1 }" --% %*
 exit /b %ERRORLEVEL%
