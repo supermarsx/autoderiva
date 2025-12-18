@@ -77,7 +77,8 @@ param(
     [bool]$ShowBanner,
 
     # Performance tuning
-    [ValidateSet('Multiple', 'Single')][string]$DeviceScanMode,
+    # Back-compat: accept "Multiple" but treat it as "Parallel"
+    [ValidateSet('Parallel', 'Single', 'Multiple')][string]$DeviceScanMode,
     [int]$DeviceScanMaxConcurrency,
 
     # Stats display
@@ -199,7 +200,7 @@ $DefaultConfig = @{
     HashVerifyMaxConcurrency      = 5
     # New defaults
     ScanOnlyMissingDrivers        = $true
-    DeviceScanMode                = 'Multiple'
+    DeviceScanMode                = 'Parallel'
     DeviceScanMaxConcurrency      = 8
     ClearWifiProfiles             = $true
     AskBeforeClearingWifiProfiles = $false
@@ -465,8 +466,8 @@ Options:
 
     -ShowBanner <bool>          Enable/disable printing the startup banner (default from config: $($Config.ShowBanner)).
 
-    -DeviceScanMode <mode>       Device scan mode: Multiple|Single (default from config: $($Config.DeviceScanMode)).
-    -DeviceScanMaxConcurrency <n> Max parallel workers for device scan (ProblemCode queries) when DeviceScanMode=Multiple (default from config: $($Config.DeviceScanMaxConcurrency)).
+    -DeviceScanMode <mode>       Device scan mode: Parallel|Single (default from config: $($Config.DeviceScanMode)).
+    -DeviceScanMaxConcurrency <n> Max parallel workers for device scan (ProblemCode queries) when DeviceScanMode=Parallel (default from config: $($Config.DeviceScanMaxConcurrency)).
 
     -ShowOnlyNonZeroStats        Only show counters above 0 in Statistics (default from config: $($Config.ShowOnlyNonZeroStats)).
     -ShowAllStats                Show all counters including zeros (default: disabled).
@@ -503,8 +504,9 @@ function Write-AutoDerivaStat {
     #     Writes a single statistic counter line.
     #
     # .DESCRIPTION
-    #     Prints one stat line via Write-AutoDerivaLog. When `ShowOnlyNonZeroStats` is
-    #     enabled in the effective config, counters with value 0 (or less) are suppressed.
+    #     Prints one stat line directly to the console (so it is visible regardless of
+    #     configured LogLevel). When `ShowOnlyNonZeroStats` is enabled in the effective
+    #     config, counters with value 0 (or less) are suppressed.
     #
     # .PARAMETER Label
     #     The label to display (left side).
@@ -530,7 +532,26 @@ function Write-AutoDerivaStat {
     try { $onlyNonZero = [bool]$Config.ShowOnlyNonZeroStats } catch { $onlyNonZero = $true }
     if ($onlyNonZero -and $Value -le 0) { return }
 
-    Write-AutoDerivaLog 'INFO' ("{0} : {1}" -f $Label, $Value) $Color
+    # Stats should be visible regardless of configured LogLevel.
+    try {
+        Write-Host "   [" -NoNewline -ForegroundColor $Script:ColorDim
+        Write-Host "STAT" -NoNewline -ForegroundColor $Color
+        Write-Host "] {0} : {1}" -f $Label, $Value -ForegroundColor $Script:ColorText
+    }
+    catch {
+        # Fallback for constrained hosts
+        Write-Output ("STAT {0} : {1}" -f $Label, $Value)
+    }
+
+    if ($LogFilePath) {
+        try {
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Add-Content -Path $LogFilePath -Value "[$timestamp] [INFO] {0} : {1}" -f $Label, $Value -ErrorAction SilentlyContinue
+        }
+        catch {
+            Write-Verbose "Failed to write stat to log file: $_"
+        }
+    }
 }
 
 function Test-AutoDerivaPromptAvailable {
@@ -1419,11 +1440,14 @@ function Get-MissingDriverDevice {
 
     # Parallelize the per-device ProblemCode query (Get-PnpDeviceProperty) via runspaces.
     # This can be a noticeable speedup on systems with lots of devices.
-    $mode = 'Multiple'
+    $mode = 'Parallel'
     try {
         if ($Config.DeviceScanMode) { $mode = [string]$Config.DeviceScanMode }
     }
-    catch { $mode = 'Multiple' }
+    catch { $mode = 'Parallel' }
+
+    # Back-compat: treat "Multiple" as "Parallel"
+    if ($mode -eq 'Multiple') { $mode = 'Parallel' }
 
     $maxConcurrency = 8
     try {
@@ -2284,9 +2308,7 @@ function Main {
         Write-AutoDerivaStat -Label 'Drivers Installed' -Value $Script:Stats.DriversInstalled -Color 'Green'
         Write-AutoDerivaStat -Label 'Drivers Failed' -Value $Script:Stats.DriversFailed -Color 'Red'
         Write-AutoDerivaStat -Label 'Unknown Drivers' -Value $Script:Stats.UnknownDriversAfterInstall -Color 'Yellow'
-        if ($Script:Stats.RebootsRequired -gt 0) {
-            Write-AutoDerivaLog "WARN" "Reboots Required     : $($Script:Stats.RebootsRequired)" "Yellow"
-        }
+        Write-AutoDerivaStat -Label 'Reboots Required' -Value $Script:Stats.RebootsRequired -Color 'Yellow'
 
         if ($InstallResults.Count -gt 0) {
             Write-Section "Detailed Summary"

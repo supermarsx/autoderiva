@@ -159,7 +159,7 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
 
     It 'Respects DeviceScanMode override' {
         $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true }
-        $config.DeviceScanMode | Should -Be 'Multiple'
+        $config.DeviceScanMode | Should -Be 'Parallel'
 
         $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; DeviceScanMode = 'Single' }
         $config.DeviceScanMode | Should -Be 'Single'

@@ -28,9 +28,7 @@ This file lives at the repo root and should contain only the keys you want to ov
 {
     "MaxConcurrentDownloads": 4,
     "SingleDownloadMode": false,
-    "ScanOnlyMissingDrivers": true,
-    "WifiCleanupMode": "SingleOnly",
-    "WifiProfileNameToDelete": "Null"
+    "ScanOnlyMissingDrivers": true
 }
 ```
 
@@ -66,14 +64,21 @@ Defaults shown below match `config.defaults.json`.
 | `HashVerifyMode` | string | `Parallel` | Hash verification mode when `VerifyFileHashes` is enabled: `Parallel` or `Single`. |
 | `HashVerifyMaxConcurrency` | integer | `5` | Max number of files to hash in parallel when `HashVerifyMode` is `Parallel`. |
 | `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, scans only devices missing drivers (PnP ProblemCode `28`). |
-| `DeviceScanMode` | string | `Multiple` | Device scan mode for ProblemCode queries: `Multiple` (parallel runspaces) or `Single` (serial). |
+| `DeviceScanMode` | string | `Parallel` | Device scan mode for ProblemCode queries: `Parallel` (runspaces) or `Single` (serial). (`Multiple` is accepted for backward compatibility and treated as `Parallel`.) |
 | `DeviceScanMaxConcurrency` | integer | `8` | Max parallel workers for device scan (ProblemCode queries). Set to `1` to force single-threaded scan. |
-| `ClearWifiProfiles` | boolean | `true` | Master switch for Wi‑Fi profile cleanup at end of run. |
-| `AskBeforeClearingWifiProfiles` | boolean | `false` | If `true`, asks before deleting saved Wi‑Fi profiles. |
-| `WifiCleanupMode` | string | `SingleOnly` | Wi‑Fi cleanup mode: `SingleOnly`, `All`, or `None`. |
-| `WifiProfileNameToDelete` | string | `Null` | Profile name to delete when `WifiCleanupMode` is `SingleOnly`. |
 | `AutoExitWithoutConfirmation` | boolean | `false` | If `true`, exits without waiting for confirmation at the end. |
 | `ShowOnlyNonZeroStats` | boolean | `true` | If `true`, stats output hides 0 counters. |
+
+## Wi-Fi profile cleanup
+
+These keys control optional Wi-Fi profile cleanup at the end of the run (or via `-ClearWifiAndExit`).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `ClearWifiProfiles` | boolean | `true` | Master switch for Wi-Fi profile cleanup at end of run. |
+| `AskBeforeClearingWifiProfiles` | boolean | `false` | If `true`, asks before deleting saved Wi-Fi profiles. |
+| `WifiCleanupMode` | string | `SingleOnly` | Wi-Fi cleanup mode: `SingleOnly`, `All`, or `None`. |
+| `WifiProfileNameToDelete` | string | `Null` | Profile name to delete when `WifiCleanupMode` is `SingleOnly`. |
 
 ## CLI options (high level)
 
@@ -117,7 +122,7 @@ Driver scan behavior:
 
 - `-ScanOnlyMissingDrivers`
 - `-ScanAllDevices`
-- `-DeviceScanMode <Multiple|Single>`
+- `-DeviceScanMode <Parallel|Single>`
 - `-DeviceScanMaxConcurrency <n>`
 
 Wi‑Fi cleanup behavior:
