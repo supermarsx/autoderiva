@@ -50,6 +50,7 @@ param(
 
     # File integrity verification
     [bool]$VerifyFileHashes,
+    [bool]$DeleteFilesOnHashMismatch,
     [ValidateSet('Parallel', 'Single')][string]$HashVerifyMode,
     [int]$HashVerifyMaxConcurrency,
 
@@ -144,6 +145,7 @@ $DefaultConfig = @{
     MaxConcurrentDownloads        = 6
     SingleDownloadMode            = $false
     VerifyFileHashes              = $false
+    DeleteFilesOnHashMismatch     = $false
     HashVerifyMode                = 'Parallel'
     HashVerifyMaxConcurrency      = 5
     # New defaults
@@ -316,6 +318,7 @@ if ($PSBoundParameters.Count -gt 0) {
 
     # File integrity verification
     if ($PSBoundParameters.ContainsKey('VerifyFileHashes')) { $Config.VerifyFileHashes = [bool]$VerifyFileHashes }
+    if ($PSBoundParameters.ContainsKey('DeleteFilesOnHashMismatch')) { $Config.DeleteFilesOnHashMismatch = [bool]$DeleteFilesOnHashMismatch }
     if ($PSBoundParameters.ContainsKey('HashVerifyMode') -and $HashVerifyMode) { $Config.HashVerifyMode = $HashVerifyMode }
     if ($PSBoundParameters.ContainsKey('HashVerifyMaxConcurrency') -and $HashVerifyMaxConcurrency -gt 0) { $Config.HashVerifyMaxConcurrency = $HashVerifyMaxConcurrency }
 
@@ -380,6 +383,7 @@ Options:
     -NoDiskSpaceCheck           Skip pre-flight disk space check (default: disabled; config default: $(-not $Config.CheckDiskSpace)).
 
     -VerifyFileHashes <bool>     Enable/disable SHA256 verification using the manifest's Sha256 column (default from config: $($Config.VerifyFileHashes)).
+    -DeleteFilesOnHashMismatch <bool> Delete a downloaded file when its SHA256 mismatches (default from config: $($Config.DeleteFilesOnHashMismatch)).
     -HashVerifyMode <mode>       Hash verification mode: Parallel|Single (default from config: $($Config.HashVerifyMode)).
     -HashVerifyMaxConcurrency <n>Max parallel hash workers when HashVerifyMode=Parallel (default from config: $($Config.HashVerifyMaxConcurrency)).
 
@@ -882,13 +886,22 @@ function Get-AutoDerivaSha256Hex {
     )
 
     $stream = $null
+    $sha = $null
     try {
         $stream = [System.IO.File]::OpenRead($Path)
         $sha = [System.Security.Cryptography.SHA256]::Create()
         $hashBytes = $sha.ComputeHash($stream)
         return ([System.BitConverter]::ToString($hashBytes)).Replace('-', '').ToLowerInvariant()
     }
+    catch {
+        Write-Verbose "Failed to compute SHA256 for file: $Path. Error: $_"
+        return $null
+    }
     finally {
+        if ($sha) {
+            try { $sha.Dispose() }
+            catch { Write-Verbose "Failed to dispose SHA256 object: $_" }
+        }
         if ($stream) {
             try { $stream.Dispose() }
             catch { Write-Verbose "Failed to dispose file stream for SHA256: $_" }
@@ -905,8 +918,15 @@ function Test-AutoDerivaFileHash {
     if (-not (Test-Path -LiteralPath $Path)) { return $false }
     if ([string]::IsNullOrWhiteSpace($ExpectedSha256)) { return $true }
 
+    $expected = $ExpectedSha256.Trim()
+    if ($expected -notmatch '^[0-9a-fA-F]{64}$') {
+        Write-Verbose "Expected SHA256 is not a 64-hex string for file: $Path. Expected: $expected"
+        return $false
+    }
+
     $actual = Get-AutoDerivaSha256Hex -Path $Path
-    return ($actual -eq $ExpectedSha256.Trim().ToLowerInvariant())
+    if ([string]::IsNullOrWhiteSpace($actual)) { return $false }
+    return ($actual -eq $expected.ToLowerInvariant())
 }
 
 function Invoke-DownloadedFileHashVerification {
@@ -917,6 +937,9 @@ function Invoke-DownloadedFileHashVerification {
     $verify = $false
     try { $verify = [bool]$Config.VerifyFileHashes } catch { $verify = $false }
     if (-not $verify) { return }
+
+    $deleteOnMismatch = $false
+    try { $deleteOnMismatch = [bool]$Config.DeleteFilesOnHashMismatch } catch { $deleteOnMismatch = $false }
 
     $mode = 'Parallel'
     try {
@@ -936,15 +959,22 @@ function Invoke-DownloadedFileHashVerification {
     if ($mode -eq 'Single') { $maxConcurrency = 1 }
 
     $toCheck = @()
+    $sawAnyHashField = $false
     foreach ($f in $FileList) {
         if (-not $f) { continue }
         if (-not ($f.ContainsKey('ExpectedSha256'))) { continue }
+        $sawAnyHashField = $true
         $expected = [string]$f.ExpectedSha256
         if ([string]::IsNullOrWhiteSpace($expected)) { continue }
         if (-not (Test-Path -LiteralPath $f.OutputPath)) { continue }
         $toCheck += $f
     }
-    if ($toCheck.Count -eq 0) { return }
+    if ($toCheck.Count -eq 0) {
+        if (-not $sawAnyHashField) {
+            Write-AutoDerivaLog 'WARN' 'VerifyFileHashes is enabled but no SHA256 values were provided (manifest missing hashes). Skipping hash verification.' 'Yellow'
+        }
+        return
+    }
 
     $mismatch = 0
     $checked = 0
@@ -962,9 +992,14 @@ function Invoke-DownloadedFileHashVerification {
                 $mismatch++
                 $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
                 $label = if ($rp) { $rp } else { [string]$f.OutputPath }
-                Write-AutoDerivaLog 'ERROR' "SHA256 mismatch: $label" 'Red'
-                try { Remove-Item -LiteralPath $f.OutputPath -Force -ErrorAction SilentlyContinue }
-                catch { Write-Verbose "Failed to remove file after SHA mismatch: $($f.OutputPath): $_" }
+                if ($deleteOnMismatch) {
+                    Write-AutoDerivaLog 'ERROR' "SHA256 mismatch (deleted): $label" 'Red'
+                    try { Remove-Item -LiteralPath $f.OutputPath -Force -ErrorAction SilentlyContinue }
+                    catch { Write-Verbose "Failed to remove file after SHA mismatch: $($f.OutputPath): $_" }
+                }
+                else {
+                    Write-AutoDerivaLog 'WARN' "SHA256 mismatch (kept): $label" 'Yellow'
+                }
 
                 $Script:Stats.FilesDownloadFailed++
                 if ($Script:Stats.FilesDownloaded -gt 0) { $Script:Stats.FilesDownloaded-- }
@@ -978,6 +1013,7 @@ function Invoke-DownloadedFileHashVerification {
             param($Path, $Expected)
             $ErrorActionPreference = 'Stop'
             $stream = $null
+            $sha = $null
             try {
                 $stream = [System.IO.File]::OpenRead($Path)
                 $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -987,6 +1023,10 @@ function Invoke-DownloadedFileHashVerification {
                 return @{ Ok = ($actual -eq $exp); Actual = $actual }
             }
             finally {
+                if ($sha) {
+                    try { $sha.Dispose() }
+                    catch { Write-Verbose "Failed to dispose SHA256 object in runspace: $_" }
+                }
                 if ($stream) {
                     try { $stream.Dispose() }
                     catch { Write-Verbose "Failed to dispose SHA256 stream in runspace: $_" }
@@ -994,7 +1034,11 @@ function Invoke-DownloadedFileHashVerification {
             }
         }
 
+        $parallelOk = $false
         try {
+            # Test hook: force runspace pooling to fail
+            if ($Script:Test_FailHashRunspacePool) { throw 'Test forced hash runspace pool failure' }
+
             $runspacePool = [runspacefactory]::CreateRunspacePool(1, $maxConcurrency)
             $runspacePool.Open()
 
@@ -1023,21 +1067,63 @@ function Invoke-DownloadedFileHashVerification {
                     $f = $job.File
                     $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
                     $label = if ($rp) { $rp } else { [string]$f.OutputPath }
-                    Write-AutoDerivaLog 'ERROR' "SHA256 mismatch: $label" 'Red'
-                    try { Remove-Item -LiteralPath $f.OutputPath -Force -ErrorAction SilentlyContinue }
-                    catch { Write-Verbose "Failed to remove file after SHA mismatch: $($f.OutputPath): $_" }
+                    if ($deleteOnMismatch) {
+                        Write-AutoDerivaLog 'ERROR' "SHA256 mismatch (deleted): $label" 'Red'
+                        try { Remove-Item -LiteralPath $f.OutputPath -Force -ErrorAction SilentlyContinue }
+                        catch { Write-Verbose "Failed to remove file after SHA mismatch: $($f.OutputPath): $_" }
+                    }
+                    else {
+                        Write-AutoDerivaLog 'WARN' "SHA256 mismatch (kept): $label" 'Yellow'
+                    }
 
                     $Script:Stats.FilesDownloadFailed++
                     if ($Script:Stats.FilesDownloaded -gt 0) { $Script:Stats.FilesDownloaded-- }
                 }
             }
+
+            $parallelOk = $true
+        }
+        catch {
+            Write-AutoDerivaLog 'WARN' "Parallel SHA256 verification unavailable; falling back to Single. Error: $_" 'Yellow'
         }
         finally {
+            foreach ($job in $jobs) {
+                if (-not $job) { continue }
+                try { $job.PS.Dispose() } catch { Write-Verbose "Failed to dispose hash runspace PowerShell instance during cleanup: $_" }
+            }
+
             if ($runspacePool) {
                 try { $runspacePool.Close() }
                 catch { Write-Verbose "Failed to close hash runspace pool: $_" }
                 try { $runspacePool.Dispose() }
                 catch { Write-Verbose "Failed to dispose hash runspace pool: $_" }
+            }
+        }
+
+        if (-not $parallelOk) {
+            foreach ($f in $toCheck) {
+                $ok = $false
+                try {
+                    $ok = Test-AutoDerivaFileHash -Path $f.OutputPath -ExpectedSha256 ([string]$f.ExpectedSha256)
+                }
+                catch { $ok = $false }
+
+                if (-not $ok) {
+                    $mismatch++
+                    $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
+                    $label = if ($rp) { $rp } else { [string]$f.OutputPath }
+                    if ($deleteOnMismatch) {
+                        Write-AutoDerivaLog 'ERROR' "SHA256 mismatch (deleted): $label" 'Red'
+                        try { Remove-Item -LiteralPath $f.OutputPath -Force -ErrorAction SilentlyContinue }
+                        catch { Write-Verbose "Failed to remove file after SHA mismatch: $($f.OutputPath): $_" }
+                    }
+                    else {
+                        Write-AutoDerivaLog 'WARN' "SHA256 mismatch (kept): $label" 'Yellow'
+                    }
+
+                    $Script:Stats.FilesDownloadFailed++
+                    if ($Script:Stats.FilesDownloaded -gt 0) { $Script:Stats.FilesDownloaded-- }
+                }
             }
         }
     }

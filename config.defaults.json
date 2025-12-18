@@ -20,6 +20,7 @@
     "MaxConcurrentDownloads": 6,
     "SingleDownloadMode": false,
     "VerifyFileHashes": false,
+    "DeleteFilesOnHashMismatch": false,
     "HashVerifyMode": "Parallel",
     "HashVerifyMaxConcurrency": 5,
     "ScanOnlyMissingDrivers": true,

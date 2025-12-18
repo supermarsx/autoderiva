@@ -61,6 +61,14 @@ Describe 'Install-AutoDeriva CLI and Config Parsing' {
         $config.VerifyFileHashes | Should -BeFalse
     }
 
+    It 'Respects -DeleteFilesOnHashMismatch <bool> override' {
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; DeleteFilesOnHashMismatch = $true }
+        $config.DeleteFilesOnHashMismatch | Should -BeTrue
+
+        $config = Get-AutoDerivaEffectiveConfig -ScriptFile $script:ScriptFile -Params @{ ShowConfig = $true; DeleteFilesOnHashMismatch = $false }
+        $config.DeleteFilesOnHashMismatch | Should -BeFalse
+    }
+
     It 'Supports -DryRun flag without errors (no downloads/installs)' {
         Write-Host "TEST: Supports -DryRun flag without errors (no downloads/installs)"
         Test-Path $script:ScriptFile | Should -BeTrue
