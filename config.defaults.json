@@ -21,6 +21,7 @@
     "SingleDownloadMode": false,
     "VerifyFileHashes": false,
     "DeleteFilesOnHashMismatch": false,
+    "HashMismatchPolicy": "Continue",
     "HashVerifyMode": "Parallel",
     "HashVerifyMaxConcurrency": 5,
     "ScanOnlyMissingDrivers": true,

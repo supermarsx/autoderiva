@@ -63,6 +63,7 @@ pwsh -File ./Install-AutoDeriva.ps1
 *   **Smart driver matching**: matches by Hardware IDs; installs with `pnputil`.
 *   **Safe-by-default scanning**: defaults to scanning only devices missing drivers (PnP ProblemCode `28`).
 *   **Resilient downloads**: retry + backoff and a concurrency-safe downloader.
+*   **Optional integrity checks**: verify downloaded files using SHA256 from the manifest (disabled by default).
 *   **Layered configuration**: built-in defaults → `config.defaults.json` → `config.json` → optional remote overrides → CLI.
 *   **Wi‑Fi cleanup options**: conservative default (delete a single profile name) and a Wi‑Fi-only mode.
 *   **Cleaner output**: Statistics hide zero counters by default (configurable).
@@ -122,6 +123,11 @@ For the full key reference (types, defaults, and notes), see `docs/configuration
 | `CheckDiskSpace` | boolean | `true` | Enable/disable the disk space check (if `false`, the check is skipped). Default is `true`. |
 | `MaxConcurrentDownloads` | integer | `6` | Maximum number of parallel download threads used by the Runspace-based downloader. Lower this on low-resource systems. |
 | `SingleDownloadMode` | boolean | `false` | When `true`, forces `MaxConcurrentDownloads` to `1` and effectively disables concurrency. Default is `false`. |
+| `VerifyFileHashes` | boolean | `false` | If `true`, verifies downloaded files using the `Sha256` column from the file manifest CSV. Disabled by default. |
+| `DeleteFilesOnHashMismatch` | boolean | `false` | If `true`, deletes a downloaded file when its SHA256 mismatches. Default is to warn and keep the file. |
+| `HashMismatchPolicy` | string | `Continue` | What to do when a file hash mismatches (when `VerifyFileHashes` is enabled): `Continue` (default; install anyway), `SkipDriver` (skip installing affected drivers), or `Abort` (stop driver installation phase). |
+| `HashVerifyMode` | string | `Parallel` | Hash verification mode when `VerifyFileHashes` is enabled: `Parallel` or `Single`. |
+| `HashVerifyMaxConcurrency` | integer | `5` | Max number of files to hash in parallel when `HashVerifyMode` is `Parallel`. |
 | `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, only scans devices that are missing drivers (PnP ProblemCode `28`) and ignores hardware IDs from devices with working drivers. Default is `true`. |
 | `ClearWifiProfiles` | boolean | `true` | Master switch for Wi‑Fi profile cleanup at the end of the run. Default is `true`. |
 | `AskBeforeClearingWifiProfiles` | boolean | `false` | When `true`, asks for confirmation before deleting saved Wi‑Fi profiles. Default is `false` (no prompt). |
@@ -157,6 +163,11 @@ Download modes:
 * `-SingleDownloadMode` — Force single-threaded downloads.
 * `-MaxConcurrentDownloads <n>` — Control number of parallel downloads.
 * `-NoDiskSpaceCheck` — Skip the pre-flight disk space check.
+* `-VerifyFileHashes <true|false>` — Enable/disable SHA256 verification using the manifest.
+* `-DeleteFilesOnHashMismatch <true|false>` — Delete a file when it mismatches (default is warn+keep).
+* `-HashMismatchPolicy <Continue|SkipDriver|Abort>` — Continue installing, skip affected drivers, or abort driver install phase.
+* `-HashVerifyMode <Parallel|Single>` — Hash verification mode when enabled.
+* `-HashVerifyMaxConcurrency <n>` — Max parallel hash workers when mode is `Parallel`.
 
 Cuco:
 
@@ -198,6 +209,12 @@ Example:
 
 ```powershell
 .\Install-AutoDeriva.ps1 -EnableLogging -MaxConcurrentDownloads 2
+```
+
+Enable hash verification (keep files by default; skip affected drivers on mismatch):
+
+```powershell
+.\Install-AutoDeriva.ps1 -VerifyFileHashes $true -HashMismatchPolicy SkipDriver
 ```
 
 ## 💻 Supported Models

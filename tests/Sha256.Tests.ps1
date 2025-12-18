@@ -145,4 +145,50 @@ Describe 'SHA256 verification (installer helpers)' {
             Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
         }
     }
+
+    It 'skips driver installation when HashMismatchPolicy=SkipDriver' {
+        $env:AUTODERIVA_TEST = '1'
+        $Config.VerifyFileHashes = $true
+        $Config.DeleteFilesOnHashMismatch = $false
+        $Config.HashVerifyMode = 'Single'
+        $Config.HashMismatchPolicy = 'SkipDriver'
+        $Script:DryRun = $true
+
+        $tempDir = Join-Path $env:TEMP ("autoderiva_policy_" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+        try {
+            $inf = 'drivers/test/oem1.inf'
+            $rel = 'drivers/test/file.bin'
+            $outPath = Join-Path $tempDir ($rel -replace '/', '\\')
+            New-Item -ItemType Directory -Path (Split-Path $outPath -Parent) -Force | Out-Null
+            Set-Content -LiteralPath $outPath -Value 'data' -NoNewline -Encoding UTF8
+
+            $badExpected = ('0' * 64)
+
+            $Script:Test_GetRemoteCsv = {
+                param($Url)
+                @(
+                    [pscustomobject]@{ RelativePath = 'drivers/test/file.bin'; AssociatedInf = 'drivers/test/oem1.inf'; Sha256 = $badExpected }
+                )
+            }
+
+            $Script:Test_InvokeConcurrentDownload = {
+                param($FileList, $MaxConcurrency, $TestMode)
+                # no-op: file already exists
+                return
+            }
+
+            $driver = [pscustomobject]@{ InfPath = $inf; HardwareIDs = 'PCI\\VEN_TEST&DEV_TEST' }
+            $res = Install-Driver -DriverMatches @($driver) -TempDir $tempDir
+
+            $res | Should -Not -BeNullOrEmpty
+            ($res | Where-Object { $_.Driver -eq $inf -and $_.Status -eq 'Skipped (Hash Mismatch)' }).Count | Should -Be 1
+        }
+        finally {
+            $Script:Test_GetRemoteCsv = $null
+            $Script:Test_InvokeConcurrentDownload = $null
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }

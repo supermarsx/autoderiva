@@ -61,6 +61,8 @@ Defaults shown below match `config.defaults.json`.
 | `MaxConcurrentDownloads` | integer | `6` | Maximum number of parallel downloads (runspace-based downloader). |
 | `SingleDownloadMode` | boolean | `false` | When `true`, forces `MaxConcurrentDownloads` to `1`. |
 | `VerifyFileHashes` | boolean | `false` | If `true`, verifies downloaded files using the `Sha256` column from the file manifest CSV. Disabled by default. |
+| `DeleteFilesOnHashMismatch` | boolean | `false` | If `true`, deletes a downloaded file when its SHA256 mismatches. Default is to warn and keep the file. |
+| `HashMismatchPolicy` | string | `Continue` | What to do when a file hash mismatches (when `VerifyFileHashes` is enabled): `Continue` (default; install anyway), `SkipDriver` (skip installing affected drivers), or `Abort` (stop driver installation phase). |
 | `HashVerifyMode` | string | `Parallel` | Hash verification mode when `VerifyFileHashes` is enabled: `Parallel` or `Single`. |
 | `HashVerifyMaxConcurrency` | integer | `5` | Max number of files to hash in parallel when `HashVerifyMode` is `Parallel`. |
 | `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, scans only devices missing drivers (PnP ProblemCode `28`). |
@@ -97,6 +99,8 @@ Download behavior:
 - `-MaxConcurrentDownloads <n>`
 - `-NoDiskSpaceCheck`
 - `-VerifyFileHashes <true|false>`
+- `-DeleteFilesOnHashMismatch <true|false>`
+- `-HashMismatchPolicy <Continue|SkipDriver|Abort>`
 - `-HashVerifyMode <Parallel|Single>`
 - `-HashVerifyMaxConcurrency <n>`
 

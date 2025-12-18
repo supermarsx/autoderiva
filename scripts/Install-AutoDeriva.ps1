@@ -51,6 +51,7 @@ param(
     # File integrity verification
     [bool]$VerifyFileHashes,
     [bool]$DeleteFilesOnHashMismatch,
+    [ValidateSet('Continue', 'SkipDriver', 'Abort')][string]$HashMismatchPolicy,
     [ValidateSet('Parallel', 'Single')][string]$HashVerifyMode,
     [int]$HashVerifyMaxConcurrency,
 
@@ -146,6 +147,7 @@ $DefaultConfig = @{
     SingleDownloadMode            = $false
     VerifyFileHashes              = $false
     DeleteFilesOnHashMismatch     = $false
+    HashMismatchPolicy            = 'Continue'
     HashVerifyMode                = 'Parallel'
     HashVerifyMaxConcurrency      = 5
     # New defaults
@@ -319,6 +321,7 @@ if ($PSBoundParameters.Count -gt 0) {
     # File integrity verification
     if ($PSBoundParameters.ContainsKey('VerifyFileHashes')) { $Config.VerifyFileHashes = [bool]$VerifyFileHashes }
     if ($PSBoundParameters.ContainsKey('DeleteFilesOnHashMismatch')) { $Config.DeleteFilesOnHashMismatch = [bool]$DeleteFilesOnHashMismatch }
+    if ($PSBoundParameters.ContainsKey('HashMismatchPolicy') -and $HashMismatchPolicy) { $Config.HashMismatchPolicy = $HashMismatchPolicy }
     if ($PSBoundParameters.ContainsKey('HashVerifyMode') -and $HashVerifyMode) { $Config.HashVerifyMode = $HashVerifyMode }
     if ($PSBoundParameters.ContainsKey('HashVerifyMaxConcurrency') -and $HashVerifyMaxConcurrency -gt 0) { $Config.HashVerifyMaxConcurrency = $HashVerifyMaxConcurrency }
 
@@ -384,6 +387,7 @@ Options:
 
     -VerifyFileHashes <bool>     Enable/disable SHA256 verification using the manifest's Sha256 column (default from config: $($Config.VerifyFileHashes)).
     -DeleteFilesOnHashMismatch <bool> Delete a downloaded file when its SHA256 mismatches (default from config: $($Config.DeleteFilesOnHashMismatch)).
+    -HashMismatchPolicy <mode>   On SHA256 mismatch: Continue|SkipDriver|Abort (default from config: $($Config.HashMismatchPolicy)).
     -HashVerifyMode <mode>       Hash verification mode: Parallel|Single (default from config: $($Config.HashVerifyMode)).
     -HashVerifyMaxConcurrency <n>Max parallel hash workers when HashVerifyMode=Parallel (default from config: $($Config.HashVerifyMaxConcurrency)).
 
@@ -941,6 +945,8 @@ function Invoke-DownloadedFileHashVerification {
     $deleteOnMismatch = $false
     try { $deleteOnMismatch = [bool]$Config.DeleteFilesOnHashMismatch } catch { $deleteOnMismatch = $false }
 
+    $mismatchedDriverInfs = @()
+
     $mode = 'Parallel'
     try {
         if ($Config.HashVerifyMode) { $mode = [string]$Config.HashVerifyMode }
@@ -973,7 +979,7 @@ function Invoke-DownloadedFileHashVerification {
         if (-not $sawAnyHashField) {
             Write-AutoDerivaLog 'WARN' 'VerifyFileHashes is enabled but no SHA256 values were provided (manifest missing hashes). Skipping hash verification.' 'Yellow'
         }
-        return
+        return @{ CheckedCount = 0; MismatchCount = 0; MismatchedDriverInfs = @() }
     }
 
     $mismatch = 0
@@ -990,6 +996,7 @@ function Invoke-DownloadedFileHashVerification {
 
             if (-not $ok) {
                 $mismatch++
+                if ($f.ContainsKey('DriverInf') -and $f.DriverInf) { $mismatchedDriverInfs += [string]$f.DriverInf }
                 $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
                 $label = if ($rp) { $rp } else { [string]$f.OutputPath }
                 if ($deleteOnMismatch) {
@@ -1065,6 +1072,7 @@ function Invoke-DownloadedFileHashVerification {
                 if (-not ($result -and $result.Ok)) {
                     $mismatch++
                     $f = $job.File
+                    if ($f.ContainsKey('DriverInf') -and $f.DriverInf) { $mismatchedDriverInfs += [string]$f.DriverInf }
                     $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
                     $label = if ($rp) { $rp } else { [string]$f.OutputPath }
                     if ($deleteOnMismatch) {
@@ -1110,6 +1118,7 @@ function Invoke-DownloadedFileHashVerification {
 
                 if (-not $ok) {
                     $mismatch++
+                    if ($f.ContainsKey('DriverInf') -and $f.DriverInf) { $mismatchedDriverInfs += [string]$f.DriverInf }
                     $rp = if ($f.ContainsKey('RelativePath')) { [string]$f.RelativePath } else { $null }
                     $label = if ($rp) { $rp } else { [string]$f.OutputPath }
                     if ($deleteOnMismatch) {
@@ -1130,6 +1139,12 @@ function Invoke-DownloadedFileHashVerification {
 
     if ($mismatch -gt 0) {
         Write-AutoDerivaLog 'WARN' "SHA256 verification failed for $mismatch file(s)." 'Yellow'
+    }
+
+    return @{
+        CheckedCount         = $checked
+        MismatchCount        = $mismatch
+        MismatchedDriverInfs = ($mismatchedDriverInfs | Where-Object { $_ } | Select-Object -Unique)
     }
 }
 
@@ -1619,14 +1634,49 @@ function Install-Driver {
             $localPath = Join-Path $TempDir $file.RelativePath.Replace('/', '\')
             $expected = $null
             if ($file.PSObject.Properties.Name -contains 'Sha256') { $expected = $file.Sha256 }
-            $AllFilesToDownload += @{ Url = $remoteUrl; OutputPath = $localPath; RelativePath = $file.RelativePath; ExpectedSha256 = $expected }
+            $AllFilesToDownload += @{ Url = $remoteUrl; OutputPath = $localPath; RelativePath = $file.RelativePath; ExpectedSha256 = $expected; DriverInf = $TargetInf }
         }
     }
     
     # 2. Download concurrently
+    $policy = 'Continue'
+    $mismatchedInfSet = $null
     if ($AllFilesToDownload.Count -gt 0) {
         Invoke-ConcurrentDownload -FileList $AllFilesToDownload -MaxConcurrency $Config.MaxConcurrentDownloads
-        Invoke-DownloadedFileHashVerification -FileList $AllFilesToDownload
+
+        $hashResult = Invoke-DownloadedFileHashVerification -FileList $AllFilesToDownload
+        $mismatchedInfSet = $null
+        $policy = 'Continue'
+        try {
+            if ($Config.HashMismatchPolicy) { $policy = [string]$Config.HashMismatchPolicy }
+        }
+        catch { $policy = 'Continue' }
+        if ($policy -notin @('Continue', 'SkipDriver', 'Abort')) { $policy = 'Continue' }
+
+        $mismatchedInfs = @()
+        if ($hashResult -and $hashResult.MismatchedDriverInfs) { $mismatchedInfs = @($hashResult.MismatchedDriverInfs) }
+        if ($mismatchedInfs.Count -gt 0) {
+            $mismatchedInfSet = New-Object 'System.Collections.Generic.HashSet[string]'
+            foreach ($mi in $mismatchedInfs) { if ($mi) { [void]$mismatchedInfSet.Add(([string]$mi).ToLowerInvariant()) } }
+        }
+
+        if ($hashResult -and $hashResult.MismatchCount -gt 0 -and $policy -eq 'Abort') {
+            Write-AutoDerivaLog 'ERROR' "SHA256 mismatch policy is Abort. Aborting driver installation." 'Red'
+
+            foreach ($infPath in $DriversToInstall) {
+                $ti = $infPath.Replace('\\', '/').ToLowerInvariant()
+                if ($mismatchedInfSet -and $mismatchedInfSet.Contains($ti)) {
+                    $Script:Stats.DriversFailed++
+                    $Results += [PSCustomObject]@{ Driver = $infPath; Status = 'Failed (Hash Mismatch)'; Details = 'Hash mismatch policy: Abort' }
+                }
+                else {
+                    $Script:Stats.DriversSkipped++
+                    $Results += [PSCustomObject]@{ Driver = $infPath; Status = 'Skipped (Aborted)'; Details = 'Hash mismatch policy: Abort' }
+                }
+            }
+
+            return $Results
+        }
     }
     
     # 3. Install Drivers
@@ -1639,6 +1689,17 @@ function Install-Driver {
         Write-Progress -Id 1 -Activity "Installing Drivers" -Status "Processing $infPath ($currentDriverIndex/$totalDrivers)" -PercentComplete $driverPercent
         
         Write-AutoDerivaLog "PROCESS" "Processing driver: $infPath" "Cyan"
+
+        # Apply hash mismatch policy per driver if requested
+        if ($policy -eq 'SkipDriver' -and $mismatchedInfSet) {
+            $ti = $infPath.Replace('\\', '/').ToLowerInvariant()
+            if ($mismatchedInfSet.Contains($ti)) {
+                Write-AutoDerivaLog 'WARN' "Skipping driver due to SHA256 mismatch (policy: SkipDriver): $infPath" 'Yellow'
+                $Script:Stats.DriversSkipped++
+                $Results += [PSCustomObject]@{ Driver = $infPath; Status = 'Skipped (Hash Mismatch)'; Details = 'Hash mismatch policy: SkipDriver' }
+                continue
+            }
+        }
         
         $LocalInfPath = Join-Path $TempDir $infPath.Replace('/', '\')
         
