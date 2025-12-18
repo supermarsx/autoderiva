@@ -196,27 +196,25 @@ if (Test-Path $ConfigFile) {
 }
 
 function Import-AutoDerivaRemoteConfig {
-    <#
-    .SYNOPSIS
-        Downloads and parses a JSON configuration document from a URL.
-
-    .DESCRIPTION
-        Uses Invoke-WebRequest to fetch a JSON document and converts it to a PowerShell
-        object via ConvertFrom-Json. Intended for centrally managed configuration
-        overrides.
-
-        This function returns $null on failure and emits a warning instead of throwing,
-        so the installer can continue using local configuration.
-
-    .PARAMETER Url
-        The URL to a JSON document containing configuration overrides.
-
-    .OUTPUTS
-        PSCustomObject or $null.
-
-    .EXAMPLE
-        $remote = Import-AutoDerivaRemoteConfig -Url 'https://example.com/autoderiva/config.json'
-    #>
+    # .SYNOPSIS
+    #     Downloads and parses a JSON configuration document from a URL.
+    #
+    # .DESCRIPTION
+    #     Uses Invoke-WebRequest to fetch a JSON document and converts it to a PowerShell
+    #     object via ConvertFrom-Json. Intended for centrally managed configuration
+    #     overrides.
+    #
+    #     This function returns $null on failure and emits a warning instead of throwing,
+    #     so the installer can continue using local configuration.
+    #
+    # .PARAMETER Url
+    #     The URL to a JSON document containing configuration overrides.
+    #
+    # .OUTPUTS
+    #     PSCustomObject or $null.
+    #
+    # .EXAMPLE
+    #     $remote = Import-AutoDerivaRemoteConfig -Url 'https://example.com/autoderiva/config.json'
     param(
         [Parameter(Mandatory = $true)][string]$Url
     )
@@ -411,29 +409,27 @@ $Script:Stats = @{
 }
 
 function Write-AutoDerivaStat {
-    <#
-    .SYNOPSIS
-        Writes a single statistic counter line.
-
-    .DESCRIPTION
-        Prints one stat line via Write-AutoDerivaLog. When `ShowOnlyNonZeroStats` is
-        enabled in the effective config, counters with value 0 (or less) are suppressed.
-
-    .PARAMETER Label
-        The label to display (left side).
-
-    .PARAMETER Value
-        The numeric value to display.
-
-    .PARAMETER Color
-        The console color used for the value line.
-
-    .OUTPUTS
-        None.
-
-    .EXAMPLE
-        Write-AutoDerivaStat -Label 'Drivers Installed' -Value 12 -Color Green
-    #>
+    # .SYNOPSIS
+    #     Writes a single statistic counter line.
+    #
+    # .DESCRIPTION
+    #     Prints one stat line via Write-AutoDerivaLog. When `ShowOnlyNonZeroStats` is
+    #     enabled in the effective config, counters with value 0 (or less) are suppressed.
+    #
+    # .PARAMETER Label
+    #     The label to display (left side).
+    #
+    # .PARAMETER Value
+    #     The numeric value to display.
+    #
+    # .PARAMETER Color
+    #     The console color used for the value line.
+    #
+    # .OUTPUTS
+    #     None.
+    #
+    # .EXAMPLE
+    #     Write-AutoDerivaStat -Label 'Drivers Installed' -Value 12 -Color Green
     param(
         [Parameter(Mandatory = $true)][string]$Label,
         [Parameter(Mandatory = $true)][int]$Value,
@@ -448,25 +444,23 @@ function Write-AutoDerivaStat {
 }
 
 function Test-AutoDerivaPromptAvailable {
-    <#
-    .SYNOPSIS
-        Determines whether it is safe to prompt the user for input.
-
-    .DESCRIPTION
-        Returns $true only when:
-        - The script is not running under AUTODERIVA_TEST=1
-        - The host is interactive
-        - Console input is not redirected
-
-        This prevents hangs in CI/scheduled tasks and in VS Code integrated terminals
-        where interactive reads can be unreliable.
-
-    .OUTPUTS
-        Boolean.
-
-    .EXAMPLE
-        if (Test-AutoDerivaPromptAvailable) { Read-Host 'Continue?' }
-    #>
+    # .SYNOPSIS
+    #     Determines whether it is safe to prompt the user for input.
+    #
+    # .DESCRIPTION
+    #     Returns $true only when:
+    #     - The script is not running under AUTODERIVA_TEST=1
+    #     - The host is interactive
+    #     - Console input is not redirected
+    #
+    #     This prevents hangs in CI/scheduled tasks and in VS Code integrated terminals
+    #     where interactive reads can be unreliable.
+    #
+    # .OUTPUTS
+    #     Boolean.
+    #
+    # .EXAMPLE
+    #     if (Test-AutoDerivaPromptAvailable) { Read-Host 'Continue?' }
     # Avoid hanging in non-interactive contexts (scheduled tasks/CI) and during tests
     if ($env:AUTODERIVA_TEST -eq '1') { return $false }
     try {
@@ -486,26 +480,24 @@ function Test-AutoDerivaPromptAvailable {
 }
 
 function Wait-AutoDerivaExit {
-    <#
-    .SYNOPSIS
-        Waits for the user to exit the script (Enter or Ctrl+C).
-
-    .DESCRIPTION
-        Displays a "Press Enter" prompt and polls Console key input. Also registers a
-        Ctrl+C (CancelKeyPress) handler so the user can exit without entering input.
-
-        The wait is skipped when AutoExit is provided or when prompts are not safe
-        (see Test-AutoDerivaPromptAvailable).
-
-    .PARAMETER AutoExit
-        When set, the function returns immediately without waiting.
-
-    .OUTPUTS
-        None.
-
-    .EXAMPLE
-        Wait-AutoDerivaExit -AutoExit:$false
-    #>
+    # .SYNOPSIS
+    #     Waits for the user to exit the script (Enter or Ctrl+C).
+    #
+    # .DESCRIPTION
+    #     Displays a "Press Enter" prompt and polls Console key input. Also registers a
+    #     Ctrl+C (CancelKeyPress) handler so the user can exit without entering input.
+    #
+    #     The wait is skipped when AutoExit is provided or when prompts are not safe
+    #     (see Test-AutoDerivaPromptAvailable).
+    #
+    # .PARAMETER AutoExit
+    #     When set, the function returns immediately without waiting.
+    #
+    # .OUTPUTS
+    #     None.
+    #
+    # .EXAMPLE
+    #     Wait-AutoDerivaExit -AutoExit:$false
     param(
         [switch]$AutoExit
     )
@@ -556,31 +548,29 @@ function Wait-AutoDerivaExit {
 }
 
 function Invoke-AutoDerivaLogCleanup {
-    <#
-    .SYNOPSIS
-        Deletes old AutoDeriva log files based on retention rules.
-
-    .DESCRIPTION
-        Removes log files matching `autoderiva-*.log` under the specified directory.
-        Supports either:
-        - Force deletion of all matching logs, or
-        - Age-based deletion (`RetentionDays`) and count-based deletion (`MaxFiles`).
-
-    .PARAMETER RootPath
-        Directory containing AutoDeriva log files.
-
-    .PARAMETER RetentionDays
-        Delete logs older than this many days. Use 0 to disable age-based cleanup.
-
-    .PARAMETER MaxFiles
-        Keep at most this many newest logs. Use 0 to disable count-based cleanup.
-
-    .PARAMETER ForceAll
-        When set, deletes all `autoderiva-*.log` files in RootPath.
-
-    .OUTPUTS
-        None.
-    #>
+    # .SYNOPSIS
+    #     Deletes old AutoDeriva log files based on retention rules.
+    #
+    # .DESCRIPTION
+    #     Removes log files matching `autoderiva-*.log` under the specified directory.
+    #     Supports either:
+    #     - Force deletion of all matching logs, or
+    #     - Age-based deletion (`RetentionDays`) and count-based deletion (`MaxFiles`).
+    #
+    # .PARAMETER RootPath
+    #     Directory containing AutoDeriva log files.
+    #
+    # .PARAMETER RetentionDays
+    #     Delete logs older than this many days. Use 0 to disable age-based cleanup.
+    #
+    # .PARAMETER MaxFiles
+    #     Keep at most this many newest logs. Use 0 to disable count-based cleanup.
+    #
+    # .PARAMETER ForceAll
+    #     When set, deletes all `autoderiva-*.log` files in RootPath.
+    #
+    # .OUTPUTS
+    #     None.
     param(
         [Parameter(Mandatory = $true)][string]$RootPath,
         [int]$RetentionDays,
@@ -619,19 +609,17 @@ function Invoke-AutoDerivaLogCleanup {
 }
 
 function Get-AutoDerivaLogDirectory {
-    <#
-    .SYNOPSIS
-        Returns the log directory for this repository.
-
-    .DESCRIPTION
-        Computes the `logs/` folder path under the repository root.
-
-    .PARAMETER RepoRoot
-        Repository root directory.
-
-    .OUTPUTS
-        String.
-    #>
+    # .SYNOPSIS
+    #     Returns the log directory for this repository.
+    #
+    # .DESCRIPTION
+    #     Computes the `logs/` folder path under the repository root.
+    #
+    # .PARAMETER RepoRoot
+    #     Repository root directory.
+    #
+    # .OUTPUTS
+    #     String.
     param([string]$RepoRoot)
     return (Join-Path $RepoRoot 'logs')
 }
@@ -1015,23 +1003,21 @@ function Test-PreFlight {
 }
 
 function Get-DeviceProblemCode {
-    <#
-    .SYNOPSIS
-        Reads the PnP ProblemCode for a device instance.
-
-    .DESCRIPTION
-        Uses Get-PnpDeviceProperty with DEVPKEY_Device_ProblemCode. Returns $null if
-        the property cannot be retrieved (e.g., missing permissions or not supported).
-
-    .PARAMETER InstanceId
-        The device InstanceId from Get-PnpDevice.
-
-    .OUTPUTS
-        Int32 or $null.
-
-    .EXAMPLE
-        $code = Get-DeviceProblemCode -InstanceId $dev.InstanceId
-    #>
+    # .SYNOPSIS
+    #     Reads the PnP ProblemCode for a device instance.
+    #
+    # .DESCRIPTION
+    #     Uses Get-PnpDeviceProperty with DEVPKEY_Device_ProblemCode. Returns $null if
+    #     the property cannot be retrieved (e.g., missing permissions or not supported).
+    #
+    # .PARAMETER InstanceId
+    #     The device InstanceId from Get-PnpDevice.
+    #
+    # .OUTPUTS
+    #     Int32 or $null.
+    #
+    # .EXAMPLE
+    #     $code = Get-DeviceProblemCode -InstanceId $dev.InstanceId
     param(
         [Parameter(Mandatory = $true)][string]$InstanceId
     )
@@ -1050,20 +1036,18 @@ function Get-DeviceProblemCode {
 }
 
 function Get-MissingDriverDevice {
-    <#
-    .SYNOPSIS
-        Filters devices to those missing drivers.
-
-    .DESCRIPTION
-        Given a list of PnP devices (from Get-PnpDevice), returns only those whose
-        ProblemCode equals 28 ("drivers not installed").
-
-    .PARAMETER SystemDevices
-        Collection of devices returned by Get-PnpDevice.
-
-    .OUTPUTS
-        Object[]. Subset of the input device objects.
-    #>
+    # .SYNOPSIS
+    #     Filters devices to those missing drivers.
+    #
+    # .DESCRIPTION
+    #     Given a list of PnP devices (from Get-PnpDevice), returns only those whose
+    #     ProblemCode equals 28 ("drivers not installed").
+    #
+    # .PARAMETER SystemDevices
+    #     Collection of devices returned by Get-PnpDevice.
+    #
+    # .OUTPUTS
+    #     Object[]. Subset of the input device objects.
     param(
         [Parameter(Mandatory = $true)]$SystemDevices
     )
@@ -1129,17 +1113,15 @@ function Get-SystemHardware {
 }
 
 function Get-UnknownDriverDeviceCount {
-    <#
-    .SYNOPSIS
-        Counts how many present devices are missing drivers.
-
-    .DESCRIPTION
-        Computes the number of present devices with ProblemCode 28. A test hook
-        (`$Script:Test_GetUnknownDriverCount`) can override the computation.
-
-    .OUTPUTS
-        Int32.
-    #>
+    # .SYNOPSIS
+    #     Counts how many present devices are missing drivers.
+    #
+    # .DESCRIPTION
+    #     Computes the number of present devices with ProblemCode 28. A test hook
+    #     (`$Script:Test_GetUnknownDriverCount`) can override the computation.
+    #
+    # .OUTPUTS
+    #     Int32.
     # "Unknown" here means devices still missing drivers (ProblemCode 28)
     try {
         if ($Script:Test_GetUnknownDriverCount) {
@@ -1158,23 +1140,21 @@ function Get-UnknownDriverDeviceCount {
 }
 
 function Clear-WifiProfile {
-    <#
-    .SYNOPSIS
-        Deletes saved Wi-Fi profiles according to configuration.
-
-    .DESCRIPTION
-        Enumerates Wi-Fi profiles using `netsh wlan show profiles` and deletes profiles
-        using `netsh wlan delete profile`. Behavior is controlled by config:
-        - ClearWifiProfiles (master enable)
-        - WifiCleanupMode: SingleOnly|All|None (NullOnly accepted as legacy alias)
-        - WifiProfileNameToDelete (used by SingleOnly)
-        - AskBeforeClearingWifiProfiles (optional confirmation)
-
-        This operation is skipped when AUTODERIVA_TEST=1.
-
-    .OUTPUTS
-        None.
-    #>
+    # .SYNOPSIS
+    #     Deletes saved Wi-Fi profiles according to configuration.
+    #
+    # .DESCRIPTION
+    #     Enumerates Wi-Fi profiles using `netsh wlan show profiles` and deletes profiles
+    #     using `netsh wlan delete profile`. Behavior is controlled by config:
+    #     - ClearWifiProfiles (master enable)
+    #     - WifiCleanupMode: SingleOnly|All|None (NullOnly accepted as legacy alias)
+    #     - WifiProfileNameToDelete (used by SingleOnly)
+    #     - AskBeforeClearingWifiProfiles (optional confirmation)
+    #
+    #     This operation is skipped when AUTODERIVA_TEST=1.
+    #
+    # .OUTPUTS
+    #     None.
     # Deletes all saved Wi-Fi profiles when enabled via config.
     if ($env:AUTODERIVA_TEST -eq '1') {
         Write-Verbose 'AUTODERIVA_TEST set - skipping Wi-Fi profile deletion.'
@@ -1702,23 +1682,21 @@ function Invoke-ConcurrentDownload {
 # 3b. MAIN - Execution Entry Point
 # ---------------------------------------------------------------------------
 function Main {
-    <#
-    .SYNOPSIS
-        Main entry point for the AutoDeriva installer.
-
-    .DESCRIPTION
-        Orchestrates the overall flow:
-        - Optional Cuco download
-        - Temp workspace creation and disk-space check
-        - Optional download-all phase
-        - Hardware detection and inventory fetch
-        - Driver matching, download, and installation
-        - Cleanup, statistics printing, optional Wi-Fi cleanup
-        - Final exit wait (Enter/Ctrl+C) based on configuration
-
-    .OUTPUTS
-        None.
-    #>
+    # .SYNOPSIS
+    #     Main entry point for the AutoDeriva installer.
+    #
+    # .DESCRIPTION
+    #     Orchestrates the overall flow:
+    #     - Optional Cuco download
+    #     - Temp workspace creation and disk-space check
+    #     - Optional download-all phase
+    #     - Hardware detection and inventory fetch
+    #     - Driver matching, download, and installation
+    #     - Cleanup, statistics printing, optional Wi-Fi cleanup
+    #     - Final exit wait (Enter/Ctrl+C) based on configuration
+    #
+    # .OUTPUTS
+    #     None.
     try {
         # Install Cuco
         Install-Cuco
