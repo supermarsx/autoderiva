@@ -17,5 +17,5 @@ jobs:
     uses: ./.github/workflows/publish-installers.yml
     with:
       event_name: ${{ github.event_name }}
-      ref: ${{ github.event.workflow_run.head_sha }}
+      checkout_ref: ${{ github.event.workflow_run.head_sha }}
     secrets: inherit
