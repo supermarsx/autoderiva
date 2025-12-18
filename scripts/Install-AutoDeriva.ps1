@@ -215,10 +215,43 @@ $ConfigFile = Join-Path $Script:RepoRoot "config.json"
 
 function Write-AutoDerivaBanner {
     try {
+        $width = 0
+        try {
+            if ($Host -and $Host.UI -and $Host.UI.RawUI) {
+                # WindowSize can throw in some hosts; BufferSize is sometimes more stable.
+                try { $width = [int]$Host.UI.RawUI.WindowSize.Width } catch { $width = 0 }
+                if ($width -le 0) {
+                    try { $width = [int]$Host.UI.RawUI.BufferSize.Width } catch { $width = 0 }
+                }
+            }
+        }
+        catch { $width = 0 }
+
+        # Keep banner lines within the current width to prevent wrapping/reflow.
+        # Use a sensible maximum so the banner stays compact.
+        $maxBannerWidth = 60
+        if ($width -le 0) { $width = $maxBannerWidth + 1 }
+        $lineWidth = [Math]::Min([Math]::Max(($width - 1), 10), $maxBannerWidth)
+
+        $rule = ('=' * $lineWidth)
+
+        $title = 'AutoDeriva - System Setup & Driver Tool'
+        if ($title.Length -gt ($lineWidth - 2)) {
+            # Truncate and add ellipsis when the console is narrow.
+            $maxTitle = [Math]::Max(($lineWidth - 5), 8)
+            if ($title.Length -gt $maxTitle) { $title = $title.Substring(0, $maxTitle) + '...' }
+        }
+
+        # Center the title within the rule width.
+        $padTotal = [Math]::Max(($lineWidth - $title.Length), 0)
+        $padLeft = [Math]::Floor($padTotal / 2)
+        $padRight = $padTotal - $padLeft
+        $titleLine = (' ' * $padLeft) + $title + (' ' * $padRight)
+
         Write-Host ''
-        Write-Host '========================================' -ForegroundColor Cyan
-        Write-Host ' AutoDeriva - System Setup & Driver Tool ' -ForegroundColor Cyan
-        Write-Host '========================================' -ForegroundColor Cyan
+        Write-Host $rule -ForegroundColor Cyan
+        Write-Host $titleLine -ForegroundColor Cyan
+        Write-Host $rule -ForegroundColor Cyan
         Write-Host ''
     }
     catch {
