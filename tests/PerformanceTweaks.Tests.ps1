@@ -24,7 +24,7 @@ Describe 'Performance tweaks (registry) behavior' {
         $Config.DisableNewsAndInterestsAndWidgets = $true
         $Config.HideTaskbarSearch = $true
 
-        Apply-PerformanceTweaks
+        Invoke-PerformanceTuning
 
         # OneDrive startup removal
         ($calls | Where-Object { $_.Op -eq 'RemoveValue' -and $_.Path -like 'HKCU:*Run' -and $_.Name -eq 'OneDrive' }).Count | Should -Be 1
@@ -62,7 +62,7 @@ Describe 'Performance tweaks (registry) behavior' {
         $Config.DisableNewsAndInterestsAndWidgets = $false
         $Config.HideTaskbarSearch = $false
 
-        Apply-PerformanceTweaks
+        Invoke-PerformanceTuning
 
         $calls.Count | Should -Be 0
     }

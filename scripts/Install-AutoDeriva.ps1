@@ -266,11 +266,14 @@ function Write-AutoDerivaBanner {
 }
 
 function Set-AutoDerivaRegistryDword {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][int]$Value
     )
+
+    if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$Path\\$Name", "Set DWORD to $Value"))) { return }
 
     if ($Script:DryRun) {
         Write-AutoDerivaLog 'INFO' "DryRun: Would set registry DWORD $Path\\$Name=$Value" 'Gray'
@@ -283,17 +286,21 @@ function Set-AutoDerivaRegistryDword {
     }
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        try { New-Item -Path $Path -Force | Out-Null } catch { }
+        try { New-Item -Path $Path -Force | Out-Null }
+        catch { Write-Verbose "Failed to create registry key ${Path}: $_" }
     }
 
     Set-ItemProperty -Path $Path -Name $Name -Type DWord -Value $Value -Force | Out-Null
 }
 
 function Remove-AutoDerivaRegistryValue {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Name
     )
+
+    if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$Path\\$Name", 'Remove registry value'))) { return }
 
     if ($Script:DryRun) {
         Write-AutoDerivaLog 'INFO' "DryRun: Would remove registry value $Path\\$Name" 'Gray'
@@ -309,11 +316,11 @@ function Remove-AutoDerivaRegistryValue {
         Remove-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Verbose "Failed to remove registry value $Path\\$Name: $_"
+        Write-Verbose "Failed to remove registry value ${Path}\\${Name}: $_"
     }
 }
 
-function Apply-PerformanceTweaks {
+function Invoke-PerformanceTuning {
     [CmdletBinding()]
     param()
 
@@ -324,10 +331,10 @@ function Apply-PerformanceTweaks {
     $disableFeedsWidgets = $true
     $hideTaskbarSearch = $true
 
-    try { $disableOneDriveStartup = [bool]$Config.DisableOneDriveStartup } catch { }
-    try { $hideTaskView = [bool]$Config.HideTaskViewButton } catch { }
-    try { $disableFeedsWidgets = [bool]$Config.DisableNewsAndInterestsAndWidgets } catch { }
-    try { $hideTaskbarSearch = [bool]$Config.HideTaskbarSearch } catch { }
+    try { $disableOneDriveStartup = [bool]$Config.DisableOneDriveStartup } catch { Write-Verbose "Failed to read DisableOneDriveStartup: $_" }
+    try { $hideTaskView = [bool]$Config.HideTaskViewButton } catch { Write-Verbose "Failed to read HideTaskViewButton: $_" }
+    try { $disableFeedsWidgets = [bool]$Config.DisableNewsAndInterestsAndWidgets } catch { Write-Verbose "Failed to read DisableNewsAndInterestsAndWidgets: $_" }
+    try { $hideTaskbarSearch = [bool]$Config.HideTaskbarSearch } catch { Write-Verbose "Failed to read HideTaskbarSearch: $_" }
 
     if ($disableOneDriveStartup) {
         Write-AutoDerivaLog 'INFO' 'Disabling OneDrive auto-start...' 'Gray'
@@ -377,48 +384,48 @@ function Apply-PerformanceTweaks {
 
 # Default Configuration (Fallback)
 $DefaultConfig = @{
-    BaseUrl                       = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
-    InventoryPath                 = "exports/driver_inventory.csv"
-    ManifestPath                  = "exports/driver_file_manifest.csv"
-    RemoteConfigUrl               = $null
-    EnableLogging                 = $false
-    LogLevel                      = "INFO"
-    AutoCleanupLogs               = $true
-    LogRetentionDays              = 10
-    MaxLogFiles                   = 15
-    DownloadAllFiles              = $false
-    CucoBinaryPath                = "cuco/CtoolGui.exe"
-    DownloadCuco                  = $true
-    CucoTargetDir                 = "Desktop"
-    AskBeforeDownloadCuco         = $false
-    MaxRetries                    = 5
-    MaxBackoffSeconds             = 60
-    MinDiskSpaceMB                = 3072
-    CheckDiskSpace                = $true
-    MaxConcurrentDownloads        = 6
-    SingleDownloadMode            = $false
-    VerifyFileHashes              = $false
-    DeleteFilesOnHashMismatch     = $false
-    HashMismatchPolicy            = 'Continue'
-    HashVerifyMode                = 'Parallel'
-    HashVerifyMaxConcurrency      = 5
+    BaseUrl                           = "https://raw.githubusercontent.com/supermarsx/autoderiva/main/"
+    InventoryPath                     = "exports/driver_inventory.csv"
+    ManifestPath                      = "exports/driver_file_manifest.csv"
+    RemoteConfigUrl                   = $null
+    EnableLogging                     = $false
+    LogLevel                          = "INFO"
+    AutoCleanupLogs                   = $true
+    LogRetentionDays                  = 10
+    MaxLogFiles                       = 15
+    DownloadAllFiles                  = $false
+    CucoBinaryPath                    = "cuco/CtoolGui.exe"
+    DownloadCuco                      = $true
+    CucoTargetDir                     = "Desktop"
+    AskBeforeDownloadCuco             = $false
+    MaxRetries                        = 5
+    MaxBackoffSeconds                 = 60
+    MinDiskSpaceMB                    = 3072
+    CheckDiskSpace                    = $true
+    MaxConcurrentDownloads            = 6
+    SingleDownloadMode                = $false
+    VerifyFileHashes                  = $false
+    DeleteFilesOnHashMismatch         = $false
+    HashMismatchPolicy                = 'Continue'
+    HashVerifyMode                    = 'Parallel'
+    HashVerifyMaxConcurrency          = 5
     # New defaults
-    ScanOnlyMissingDrivers        = $true
-    DeviceScanMode                = 'Parallel'
-    DeviceScanMaxConcurrency      = 8
-    ClearWifiProfiles             = $true
-    AskBeforeClearingWifiProfiles = $false
-    WifiCleanupMode               = 'SingleOnly'
-    WifiProfileNameToDelete       = 'Null'
-    AutoExitWithoutConfirmation   = $false
-    ShowOnlyNonZeroStats          = $true
-    ShowBanner                    = $true
+    ScanOnlyMissingDrivers            = $true
+    DeviceScanMode                    = 'Parallel'
+    DeviceScanMaxConcurrency          = 8
+    ClearWifiProfiles                 = $true
+    AskBeforeClearingWifiProfiles     = $false
+    WifiCleanupMode                   = 'SingleOnly'
+    WifiProfileNameToDelete           = 'Null'
+    AutoExitWithoutConfirmation       = $false
+    ShowOnlyNonZeroStats              = $true
+    ShowBanner                        = $true
 
     # Performance tweaks (Windows 10/11)
-    DisableOneDriveStartup         = $true
-    HideTaskViewButton             = $true
+    DisableOneDriveStartup            = $true
+    HideTaskViewButton                = $true
     DisableNewsAndInterestsAndWidgets = $true
-    HideTaskbarSearch              = $true
+    HideTaskbarSearch                 = $true
 }
 
 # Initialize Config with Hardcoded Defaults
@@ -2583,7 +2590,7 @@ function Main {
             Write-AutoDerivaBanner
         }
 
-        Apply-PerformanceTweaks
+        Invoke-PerformanceTuning
 
         if ($Script:ExitAfterWifiCleanup) {
             Write-Section 'Wi-Fi Cleanup'
