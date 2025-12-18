@@ -59,6 +59,9 @@ param(
     [switch]$ScanOnlyMissingDrivers,
     [switch]$ScanAllDevices,
 
+    # Export helpers
+    [string]$ExportUnknownDevicesCsv,
+
     # Wi-Fi cleanup behavior
     [Alias('WifiCleanupAndExit', 'WifiOnly')][switch]$ClearWifiAndExit,
     [switch]$ClearWifiProfiles,
@@ -674,6 +677,8 @@ Options:
 
     -ScanOnlyMissingDrivers      Only scan devices missing drivers (default from config: $($Config.ScanOnlyMissingDrivers)).
     -ScanAllDevices              Scan all present devices (overrides ScanOnlyMissingDrivers; default: disabled).
+
+    -ExportUnknownDevicesCsv <path> Export devices missing drivers (ProblemCode 28) to a CSV file and exit.
 
     -ClearWifiAndExit            Only run Wi-Fi cleanup and exit (aliases: -WifiCleanupAndExit, -WifiOnly).
     -ClearWifiProfiles           Enable Wi-Fi cleanup at end (default from config: $($Config.ClearWifiProfiles)).
@@ -1977,6 +1982,74 @@ function Get-UnknownDriverDeviceCount {
     }
 }
 
+function Export-AutoDerivaUnknownDevicesCsv {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    Write-Section 'Unknown Devices Export'
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw 'ExportUnknownDevicesCsv path is empty.'
+    }
+
+    $outDir = $null
+    try { $outDir = Split-Path -Path $Path -Parent } catch { $outDir = $null }
+    if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
+        New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+    }
+
+    # Test hook: allow deterministic export content without querying PnP.
+    if ($Script:Test_GetUnknownDevicesForExport) {
+        $rows = @(& $Script:Test_GetUnknownDevicesForExport)
+        $rows | Export-Csv -Path $Path -NoTypeInformation -Encoding UTF8
+        Write-AutoDerivaLog 'SUCCESS' "Exported $(($rows | Measure-Object).Count) unknown device(s) to: $Path" 'Green'
+        return
+    }
+
+    try { Import-Module PnpDevice -ErrorAction SilentlyContinue | Out-Null }
+    catch { Write-Verbose "Failed to import PnpDevice module: $_" }
+
+    $systemDevices = $null
+    try {
+        $systemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
+    }
+    catch {
+        throw "Failed to query PnP devices for export: $_"
+    }
+
+    $missing = Get-MissingDriverDevice -SystemDevices $systemDevices
+    $rows = @()
+    foreach ($dev in @($missing)) {
+        if (-not $dev) { continue }
+        $instanceId = $null
+        try { $instanceId = [string]$dev.InstanceId } catch { $instanceId = $null }
+        if (-not $instanceId) { continue }
+
+        $hwids = @()
+        try {
+            $prop = Get-PnpDeviceProperty -InstanceId $instanceId -KeyName 'DEVPKEY_Device_HardwareIds' -ErrorAction Stop
+            if ($prop -and $prop.Data) { $hwids = @($prop.Data) }
+        }
+        catch { $hwids = @() }
+
+        $rows += [PSCustomObject]@{
+            InstanceId   = $instanceId
+            FriendlyName = (try { [string]$dev.FriendlyName } catch { '' })
+            Name         = (try { [string]$dev.Name } catch { '' })
+            Class        = (try { [string]$dev.Class } catch { '' })
+            Manufacturer = (try { [string]$dev.Manufacturer } catch { '' })
+            Status       = (try { [string]$dev.Status } catch { '' })
+            ProblemCode  = 28
+            HardwareIds  = (($hwids | Where-Object { $_ }) -join ';')
+        }
+    }
+
+    $rows | Export-Csv -Path $Path -NoTypeInformation -Encoding UTF8
+    Write-AutoDerivaLog 'SUCCESS' "Exported $($rows.Count) unknown device(s) to: $Path" 'Green'
+}
+
 function Clear-WifiProfile {
     # .SYNOPSIS
     #     Deletes saved Wi-Fi profiles according to configuration.
@@ -2764,6 +2837,11 @@ function Main {
 # ---------------------------------------------------------------------------
 # 4. EXECUTION
 # ---------------------------------------------------------------------------
+
+if ($PSBoundParameters.ContainsKey('ExportUnknownDevicesCsv') -and $ExportUnknownDevicesCsv) {
+    Export-AutoDerivaUnknownDevicesCsv -Path $ExportUnknownDevicesCsv
+    return
+}
 
 if ($env:AUTODERIVA_TEST -eq '1') {
     Write-Verbose "AUTODERIVA_TEST is set - skipping automatic Main() execution (test mode)."

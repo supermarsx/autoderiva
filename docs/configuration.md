@@ -129,6 +129,10 @@ Driver scan behavior:
 - `-DeviceScanMode <Parallel|Single>`
 - `-DeviceScanMaxConcurrency <n>`
 
+Device export:
+
+- `-ExportUnknownDevicesCsv <path>`: Export devices missing drivers (PnP ProblemCode `28`) to a CSV file and exit.
+
 Wi‑Fi cleanup behavior:
 
 - `-ClearWifiAndExit` (aliases: `-WifiOnly`, `-WifiCleanupAndExit`)
