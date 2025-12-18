@@ -3,7 +3,7 @@ setlocal EnableExtensions
 
 REM AutoDeriva portable one-click launcher (Windows)
 REM - Downloads and runs the latest installer from GitHub
-REM - Prefers PowerShell 7 (pwsh) when available, falls back to Windows PowerShell
+REM - Prefers Windows PowerShell 5.1 (powershell.exe) when available, falls back to PowerShell 7 (pwsh)
 REM - Passes any arguments you provide through to Install-AutoDeriva.ps1
 REM
 REM Examples:
@@ -27,8 +27,8 @@ REM - AUTODERIVA_SCRIPT_PATH: run local script path (no network)
 if defined AUTODERIVA_SCRIPT_URL set "SCRIPT_URL=%AUTODERIVA_SCRIPT_URL%"
 
 set "PS_EXE="
-where pwsh >nul 2>nul && set "PS_EXE=pwsh"
-if not defined PS_EXE where powershell >nul 2>nul && set "PS_EXE=powershell"
+where powershell >nul 2>nul && set "PS_EXE=powershell"
+if not defined PS_EXE where pwsh >nul 2>nul && set "PS_EXE=pwsh"
 
 if not defined PS_EXE (
   echo ERROR: PowerShell was not found. Please install PowerShell and try again.
