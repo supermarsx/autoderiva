@@ -71,14 +71,10 @@ if defined AUTODERIVA_BAT_DEBUG (
   "%PS_EXE%" -NoProfile -Command "Get-Content -LiteralPath $env:TMP_PS1 -TotalCount 1" 2>nul
 )
 
-REM Optional: keep PowerShell host open after script ends (useful when the installer errors immediately).
+REM Optional: keep the (non-elevated) PowerShell host open after script ends.
+REM NOTE: Do NOT enable this implicitly, otherwise CI/runtime tests can hang.
 REM - AUTODERIVA_BAT_NOEXIT=1 forces -NoExit for the PowerShell host.
-set "_AUTODERIVA_PS_NOEXIT="
-if defined AUTODERIVA_BAT_NOEXIT set "_AUTODERIVA_PS_NOEXIT=1"
-if defined AUTODERIVA_BAT_DEBUG set "_AUTODERIVA_PS_NOEXIT=1"
-if defined _AUTODERIVA_PAUSE set "_AUTODERIVA_PS_NOEXIT=1"
-
-if defined _AUTODERIVA_PS_NOEXIT (
+if defined AUTODERIVA_BAT_NOEXIT (
   "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -NoExit -File "%TMP_PS1%" %*
 ) else (
   "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS1%" %*
@@ -97,7 +93,10 @@ exit /b %RC%
 :detect_pause
 if defined AUTODERIVA_BAT_NO_PAUSE exit /b 0
 set "_AUTODERIVA_PAUSE="
-echo %cmdcmdline% | find /I "/c" >nul 2>nul && set "_AUTODERIVA_PAUSE=1"
+REM Heuristic: only treat as "double-clicked" when cmd.exe was spawned by Explorer.
+REM This avoids CI/runtime-test hangs (they also use cmd.exe /c, but not from Explorer).
+for /f "usebackq delims=" %%P in (`"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$self=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID); $cmdPid=$self.ParentProcessId; $cmd=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $cmdPid) -ErrorAction SilentlyContinue; if(-not $cmd){''; exit 0}; $ppid=$cmd.ParentProcessId; $parent=Get-Process -Id $ppid -ErrorAction SilentlyContinue; if($parent){$parent.ProcessName}else{''}" 2^>nul`) do set "_AUTODERIVA_PARENT=%%P"
+if /I "%_AUTODERIVA_PARENT%"=="explorer" set "_AUTODERIVA_PAUSE=1"
 if defined AUTODERIVA_BAT_PAUSE set "_AUTODERIVA_PAUSE=1"
 exit /b 0
 
