@@ -118,6 +118,10 @@ if ($env:AUTODERIVA_TEST -ne '1') {
         }
 
         Start-Process -FilePath 'powershell.exe' -ArgumentList $elevatedArgList -Verb RunAs -PassThru | Out-Null
+
+        # IMPORTANT: `exit` terminates the entire host (even if launched with -NoExit).
+        # When troubleshooting mode is enabled, return so the console remains open.
+        if ($noExit) { return }
         exit
     }
 }
@@ -384,8 +388,8 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('RequireExitConfirmation')) { $Config.AutoExitWithoutConfirmation = $false }
 
     # Banner / UI toggles
-    if ($PSBoundParameters.ContainsKey('ShowBanner')) { $Config.ShowBanner = $true }
-    if ($PSBoundParameters.ContainsKey('NoBanner')) { $Config.ShowBanner = $false }
+    if ($PSBoundParameters.ContainsKey('NoBanner') -and $NoBanner) { $Config.ShowBanner = $false }
+    if ($PSBoundParameters.ContainsKey('ShowBanner') -and $ShowBanner) { $Config.ShowBanner = $true }
 
     # Stats display toggles
     if ($PSBoundParameters.ContainsKey('ShowOnlyNonZeroStats')) { $Config.ShowOnlyNonZeroStats = $true }
@@ -1400,15 +1404,71 @@ function Get-MissingDriverDevice {
         [Parameter(Mandatory = $true)]$SystemDevices
     )
 
-    $missing = @()
-    foreach ($dev in $SystemDevices) {
-        if (-not $dev) { continue }
-        if (-not ($dev.PSObject.Properties.Name -contains 'InstanceId')) { continue }
-        $code = Get-DeviceProblemCode -InstanceId $dev.InstanceId
-        # 28 = "The drivers for this device are not installed."
-        if ($code -eq 28) {
-            $missing += $dev
+    $devices = @($SystemDevices | Where-Object { $_ -and ($_.PSObject.Properties.Name -contains 'InstanceId') -and $_.InstanceId })
+    if ($devices.Count -eq 0) { return @() }
+
+    # Parallelize the per-device ProblemCode query (Get-PnpDeviceProperty) via runspaces.
+    # This can be a noticeable speedup on systems with lots of devices.
+    $maxConcurrency = 8
+    $results = @()
+
+    try {
+        $runspacePool = [RunspaceFactory]::CreateRunspacePool(1, $maxConcurrency)
+        $runspacePool.Open()
+
+        $jobs = New-Object System.Collections.Generic.List[object]
+        foreach ($dev in $devices) {
+            $ps = [PowerShell]::Create()
+            $ps.RunspacePool = $runspacePool
+            $null = $ps.AddScript({
+                param($instanceId)
+                try {
+                    Import-Module PnpDevice -ErrorAction SilentlyContinue | Out-Null
+                    $prop = Get-PnpDeviceProperty -InstanceId $instanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction Stop
+                    $val = $null
+                    try { $val = [int]$prop.Data } catch { $val = $null }
+                    return [PSCustomObject]@{ InstanceId = $instanceId; ProblemCode = $val }
+                }
+                catch {
+                    return [PSCustomObject]@{ InstanceId = $instanceId; ProblemCode = $null }
+                }
+            }).AddArgument($dev.InstanceId)
+
+            $handle = $ps.BeginInvoke()
+            $jobs.Add([PSCustomObject]@{ PowerShell = $ps; Handle = $handle })
         }
+
+        foreach ($job in $jobs) {
+            try {
+                $out = $job.PowerShell.EndInvoke($job.Handle)
+                if ($out) { $results += $out }
+            }
+            finally {
+                try { $job.PowerShell.Dispose() } catch { Write-Verbose "Failed to dispose PowerShell job: $_" }
+            }
+        }
+    }
+    catch {
+        Write-Verbose "Parallel missing-driver scan unavailable; falling back to single. Error: $_"
+        $results = @()
+        foreach ($dev in $devices) {
+            $code = Get-DeviceProblemCode -InstanceId $dev.InstanceId
+            $results += [PSCustomObject]@{ InstanceId = $dev.InstanceId; ProblemCode = $code }
+        }
+    }
+    finally {
+        if ($runspacePool) {
+            try { $runspacePool.Close() } catch { Write-Verbose "Failed to close RunspacePool: $_" }
+            try { $runspacePool.Dispose() } catch { Write-Verbose "Failed to dispose RunspacePool: $_" }
+        }
+    }
+
+    $missingInstanceIds = @($results | Where-Object { $_ -and $_.ProblemCode -eq 28 } | ForEach-Object { $_.InstanceId })
+    if ($missingInstanceIds.Count -eq 0) { return @() }
+
+    $missing = @()
+    foreach ($dev in $devices) {
+        if ($missingInstanceIds -contains $dev.InstanceId) { $missing += $dev }
     }
     return $missing
 }
