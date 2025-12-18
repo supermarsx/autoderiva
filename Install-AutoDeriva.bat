@@ -30,6 +30,18 @@ if not defined PS_EXE (
 )
 
 REM NOTE: A literal `irm ... | iex` pattern doesn't support forwarding script parameters.
-REM This is the closest equivalent: load script text (from local file or via `irm`), then invoke the scriptblock with @args.
-"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; if ($p -and (Test-Path -LiteralPath $p)) { $s = Get-Content -LiteralPath $p -Raw } else { $s = [string](irm -Uri $u) }; & ([ScriptBlock]::Create([string]$s)) @args } catch { Write-Error $_; exit 1 }" --% %*
-exit /b %ERRORLEVEL%
+REM This approach preserves argument forwarding reliably (even for args starting with '-'):
+REM  1) Download/copy the installer to a temp .ps1
+REM  2) Invoke PowerShell with -File <temp.ps1> %*
+set "TMP_PS1=%TEMP%\AutoDeriva_Install_%RANDOM%%RANDOM%.ps1"
+
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; $out=$env:TMP_PS1; if (-not $out) { throw 'TMP_PS1 not set' }; if ($p -and (Test-Path -LiteralPath $p)) { Copy-Item -LiteralPath $p -Destination $out -Force } else { Invoke-WebRequest -Uri $u -OutFile $out -UseBasicParsing -ErrorAction Stop } } catch { Write-Error $_; exit 1 }"
+if not %ERRORLEVEL%==0 (
+  del "%TMP_PS1%" >nul 2>nul
+  exit /b %ERRORLEVEL%
+)
+
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS1%" %*
+set "RC=%ERRORLEVEL%"
+del "%TMP_PS1%" >nul 2>nul
+exit /b %RC%

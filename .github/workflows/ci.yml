@@ -27,6 +27,9 @@ jobs:
       - name: Run Lint Check
         shell: pwsh
         run: .\dev-scripts\Lint-Check.ps1
+      - name: CSV Lint Check
+        shell: pwsh
+        run: .\dev-scripts\Csv-Check.ps1 -Mode Lint
       - name: Batch Lint Check
         shell: pwsh
         run: .\dev-scripts\Batch-Check.ps1 -Mode Lint

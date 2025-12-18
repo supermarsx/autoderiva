@@ -67,10 +67,10 @@ function Invoke-BatLintCheck {
     Assert-True ($text -match '(?m)^set "SCRIPT_URL=https://raw\.githubusercontent\.com/supermarsx/autoderiva/main/scripts/Install-AutoDeriva\.ps1"\s*$') 'BAT SCRIPT_URL must point to main scripts/Install-AutoDeriva.ps1 raw URL.'
 
     Assert-True ($text -match "(?m)%\*\s*$") 'BAT must forward args using %*.'
-    Assert-True ($text -match "(?m)^exit /b %ERRORLEVEL%\s*$") 'BAT must exit with %ERRORLEVEL%.'
+    Assert-True ($text -match '(?m)^exit /b %(ERRORLEVEL|RC)%\s*$') 'BAT must exit with %ERRORLEVEL% (or captured %RC%).'
 
-    # Ensure we keep the documented behavior of downloading and invoking script content.
-    Assert-True ($text -match "ScriptBlock\]::Create") 'BAT must use ScriptBlock::Create invocation pattern.'
+    Assert-True ($text -match '(?m)^set "TMP_PS1=%TEMP%') 'BAT must use a temp ps1 file (TMP_PS1) for robust arg forwarding.'
+    Assert-True ($text -match '(?m)\-File "%TMP_PS1%" %\*') 'BAT must execute the temp script via -File and forward %*.'
 }
 
 function Invoke-BatRuntimeTest {
