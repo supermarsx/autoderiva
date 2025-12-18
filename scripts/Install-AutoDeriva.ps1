@@ -1639,6 +1639,10 @@ function Get-MissingDriverDevice {
     $devices = @($SystemDevices | Where-Object { $_ -and ($_.PSObject.Properties.Name -contains 'InstanceId') -and $_.InstanceId })
     if ($devices.Count -eq 0) { return @() }
 
+    $showScanProgress = $true
+    if ($env:AUTODERIVA_TEST -eq '1') { $showScanProgress = $false }
+    if ($env:CI -eq '1' -or $env:GITHUB_ACTIONS -eq 'true') { $showScanProgress = $false }
+
     # Parallelize the per-device ProblemCode query (Get-PnpDeviceProperty) via runspaces.
     # This can be a noticeable speedup on systems with lots of devices.
     $mode = 'Parallel'
@@ -1657,11 +1661,30 @@ function Get-MissingDriverDevice {
 
     if ($mode -eq 'Single') { $maxConcurrency = 1 }
 
+    $totalDevices = [int]$devices.Count
+    $progressStep = 0
+    if ($totalDevices -ge 20) {
+        try { $progressStep = [Math]::Max([int][Math]::Floor($totalDevices / 10), 1) } catch { $progressStep = 0 }
+    }
+
+    if ($showScanProgress) {
+        $modeText = if ($maxConcurrency -le 1) { 'Single' } else { "Parallel ($maxConcurrency)" }
+        Write-AutoDerivaLog 'INFO' "Checking driver status (ProblemCode) for $totalDevices device(s) [$modeText]..." 'Gray'
+    }
+
     if ($maxConcurrency -le 1) {
         $results = @()
+        $done = 0
         foreach ($dev in $devices) {
             $code = Get-DeviceProblemCode -InstanceId $dev.InstanceId
             $results += [PSCustomObject]@{ InstanceId = $dev.InstanceId; ProblemCode = $code }
+
+            if ($showScanProgress) {
+                $done++
+                if (($progressStep -gt 0 -and ($done % $progressStep) -eq 0) -or $done -eq $totalDevices) {
+                    Write-AutoDerivaLog 'INFO' "Scanning devices: $done/$totalDevices" 'Gray'
+                }
+            }
         }
 
         $missingInstanceIds = @($results | Where-Object { $_ -and $_.ProblemCode -eq 28 } | ForEach-Object { $_.InstanceId })
@@ -1701,10 +1724,18 @@ function Get-MissingDriverDevice {
             $jobs.Add([PSCustomObject]@{ PowerShell = $ps; Handle = $handle })
         }
 
+        $done = 0
         foreach ($job in $jobs) {
             try {
                 $out = $job.PowerShell.EndInvoke($job.Handle)
                 if ($out) { $results += $out }
+
+                if ($showScanProgress) {
+                    $done++
+                    if (($progressStep -gt 0 -and ($done % $progressStep) -eq 0) -or $done -eq $totalDevices) {
+                        Write-AutoDerivaLog 'INFO' "Scanning devices: $done/$totalDevices" 'Gray'
+                    }
+                }
             }
             finally {
                 try { $job.PowerShell.Dispose() } catch { Write-Verbose "Failed to dispose PowerShell job: $_" }
