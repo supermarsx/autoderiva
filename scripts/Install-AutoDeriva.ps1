@@ -307,10 +307,11 @@ function Wait-AutoDerivaExit {
     $handler = $null
 
     try {
-        $handler = [ConsoleCancelEventHandler] {
-            param($source, $eventArgs)
+        $handler = [ConsoleCancelEventHandler]{
+            param($ctrlCSource, $cancelEvent)
+            [void]$ctrlCSource
             $script:__AutoDerivaCtrlC = $true
-            $eventArgs.Cancel = $true
+            $cancelEvent.Cancel = $true
         }
         try { [Console]::add_CancelKeyPress($handler) } catch { Write-Verbose "Failed to register Ctrl+C handler: $_" }
 
