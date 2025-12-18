@@ -1,4 +1,4 @@
-﻿# .SYNOPSIS
+# .SYNOPSIS
 #     AutoDeriva System Setup "&" Driver Installer (Remote/Hybrid Mode)
 #    
 # .DESCRIPTION
@@ -90,7 +90,11 @@ param(
 if ($env:AUTODERIVA_TEST -ne '1') {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         Write-Host "Requesting administrative privileges..." -ForegroundColor Yellow
-        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`"" -Verb RunAs -PassThru | Out-Null
+        $noExit = ($env:AUTODERIVA_NOEXIT -eq '1')
+        $elevatedArgs = "-NoProfile -ExecutionPolicy Bypass "
+        if ($noExit) { $elevatedArgs += "-NoExit " }
+        $elevatedArgs += "-File `"$($MyInvocation.MyCommand.Definition)`""
+        Start-Process -FilePath "powershell.exe" -ArgumentList $elevatedArgs -Verb RunAs -PassThru | Out-Null
         exit
     }
 }
@@ -753,12 +757,12 @@ function Write-BrandHeader {
     Clear-Host
     
     $Art = @(
-        ' *        .        ★        .        *        .',
-        '   .        ★          .        *        .        ★',
-        '        ★        .        *        .        ★        .',
-        '   .        *        .        ★        .        *        .',
+        ' *        .        *        .        *        .',
+        '   .        *          .        *        .        *',
+        '        *        .        *        .        *        .',
+        '   .        *        .        *        .        *        .',
         '',
-        '             ´ | ` ',
+        "             ' | ` ",
         '      ________ |________',
         '     \__________________/',
         '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
