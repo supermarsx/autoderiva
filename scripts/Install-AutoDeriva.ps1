@@ -1742,17 +1742,147 @@ function Get-RemoteCsv {
 # .DESCRIPTION
 #     Checks for internet connectivity.
 function Test-PreFlight {
-    Write-Section "Pre-flight Checks"
+    Write-Section 'Preflight Checks'
+
+    $writeOk = {
+        param([string]$Name, [string]$Detail)
+        if ([string]::IsNullOrWhiteSpace($Detail)) { $Detail = 'OK' }
+        Write-AutoDerivaLog 'SUCCESS' ("{0}: {1}" -f $Name, $Detail) 'Green'
+    }
+    $writeWarn = {
+        param([string]$Name, [string]$Detail)
+        if ([string]::IsNullOrWhiteSpace($Detail)) { $Detail = 'Warning' }
+        Write-AutoDerivaLog 'WARN' ("{0}: {1}" -f $Name, $Detail) 'Yellow'
+    }
+    # Admin check
+    $isAdmin = $false
     try {
-        $testUrl = "https://github.com"
-        $request = [System.Net.WebRequest]::Create($testUrl)
-        $request.Timeout = 5000
-        $response = $request.GetResponse()
-        $response.Close()
-        Write-AutoDerivaLog "INFO" "Internet connection verified." "Green"
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')
     }
     catch {
-        Write-AutoDerivaLog "WARN" "Internet connection check failed. Remote downloads may fail." "Yellow"
+        $isAdmin = $false
+    }
+    if ($isAdmin) { & $writeOk 'Admin' 'Running elevated' } else { & $writeWarn 'Admin' 'Not elevated (some operations may be skipped/fail)' }
+
+    # Log writable check (best-effort)
+    try {
+        if (-not $Config.EnableLogging) {
+            Write-AutoDerivaLog 'INFO' 'Logging: Disabled (skipping log writable check)' 'Gray'
+        }
+        elseif (-not $LogFilePath) {
+            & $writeWarn 'Logging' 'Log file path not set (console-only logging)' 
+        }
+        else {
+            try {
+                Add-Content -Path $LogFilePath -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [INFO] Preflight: log writable check" -ErrorAction Stop
+                & $writeOk 'Logging' ("Writable ({0})" -f $LogFilePath)
+            }
+            catch {
+                & $writeWarn 'Logging' ("Not writable ({0})" -f $LogFilePath)
+            }
+        }
+    }
+    catch {
+        & $writeWarn 'Logging' 'Could not verify log writability'
+    }
+
+    # Disk space check (uses existing logic; non-fatal here)
+    try {
+        if ($Config.CheckDiskSpace) {
+            $pathToCheck = $env:TEMP
+            if (-not $pathToCheck) { $pathToCheck = '.' }
+            [void](Test-DiskSpace -Path $pathToCheck)
+        }
+        else {
+            Write-AutoDerivaLog 'INFO' 'Disk Space: Skipped (disabled by config)' 'Gray'
+        }
+    }
+    catch {
+        & $writeWarn 'Disk Space' 'Could not verify'
+    }
+
+    # Network checks: keep fast; never fatal. Skipped in AUTODERIVA_TEST to avoid noisy/flaky CI.
+    if ($env:AUTODERIVA_TEST -eq '1') {
+        Write-AutoDerivaLog 'INFO' 'Network: Skipped (AUTODERIVA_TEST=1)' 'Gray'
+        return
+    }
+
+    $invokeHttpCheck = {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [Parameter(Mandatory = $true)][string]$Url,
+            [ValidateSet('GET', 'HEAD')][string]$Method = 'HEAD',
+            [int]$TimeoutMs = 4000
+        )
+
+        try {
+            $req = [System.Net.HttpWebRequest]::Create($Url)
+            $req.Method = $Method
+            $req.Timeout = $TimeoutMs
+            $req.ReadWriteTimeout = $TimeoutMs
+            $req.AllowAutoRedirect = $true
+            $req.UserAgent = 'AutoDeriva-Preflight'
+            $resp = $req.GetResponse()
+            try {
+                $code = 0
+                try { $code = [int]$resp.StatusCode } catch { $code = 0 }
+                if ($code -ge 200 -and $code -lt 400) {
+                    & $writeOk $Name ("HTTP {0}" -f $code)
+                }
+                else {
+                    & $writeWarn $Name ("HTTP {0}" -f $code)
+                }
+            }
+            finally {
+                try { $resp.Close() } catch { Write-Verbose "Failed to close HTTP response for $Name: $_" }
+            }
+        }
+        catch {
+            $msg = $_.Exception.Message
+            if ([string]::IsNullOrWhiteSpace($msg)) { $msg = 'Request failed' }
+            & $writeWarn $Name $msg
+        }
+    }
+
+    # Internet (DNS)
+    try {
+        [void][System.Net.Dns]::GetHostEntry('github.com')
+        & $writeOk 'Internet (DNS)' 'Resolved github.com'
+    }
+    catch {
+        & $writeWarn 'Internet (DNS)' 'DNS resolution failed'
+    }
+
+    # GitHub (web) + GitHub content base (raw)
+    & $invokeHttpCheck -Name 'GitHub' -Url 'https://github.com' -Method 'HEAD' -TimeoutMs 4000
+    try {
+        $baseUrl = $null
+        try { $baseUrl = [string]$Config.BaseUrl } catch { $baseUrl = $null }
+        if (-not [string]::IsNullOrWhiteSpace($baseUrl) -and ($baseUrl -match '^https?://')) {
+            & $invokeHttpCheck -Name 'GitHub (BaseUrl)' -Url $baseUrl -Method 'HEAD' -TimeoutMs 4000
+        }
+    }
+    catch {
+        Write-Verbose "Failed to check BaseUrl connectivity: $_"
+    }
+
+    # Google (generate_204 is a lightweight connectivity endpoint)
+    & $invokeHttpCheck -Name 'Google' -Url 'https://www.google.com/generate_204' -Method 'GET' -TimeoutMs 4000
+
+    # Ping check (ICMP may be blocked; warn-only)
+    try {
+        $ping = New-Object System.Net.NetworkInformation.Ping
+        $reply = $ping.Send('1.1.1.1', 2000)
+        if ($reply -and $reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+            & $writeOk 'Ping' ("1.1.1.1 in {0}ms" -f $reply.RoundtripTime)
+        }
+        else {
+            $status = if ($reply) { [string]$reply.Status } else { 'No reply' }
+            & $writeWarn 'Ping' $status
+        }
+    }
+    catch {
+        & $writeWarn 'Ping' ($_.Exception.Message)
     }
 }
 
@@ -2691,6 +2821,8 @@ function Main {
         if ($Config.ShowBanner) {
             Write-AutoDerivaBanner
         }
+
+        Test-PreFlight
 
         Invoke-PerformanceTuning
 
