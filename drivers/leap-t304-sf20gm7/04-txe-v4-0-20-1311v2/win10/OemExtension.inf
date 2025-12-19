@@ -1,0 +1,96 @@
+;=============================================================================
+;
+; Copyright (c) Intel Corporation (2017-2019).
+;
+; INTEL MAKES NO WARRANTY OF ANY KIND REGARDING THE CODE.  THIS CODE IS
+; LICENSED ON AN "AS IS" BASIS AND INTEL WILL NOT PROVIDE ANY SUPPORT,
+; ASSISTANCE, INSTALLATION, TRAINING OR OTHER SERVICES.  INTEL DOES NOT
+; PROVIDE ANY UPDATES, ENHANCEMENTS OR EXTENSIONS.  INTEL SPECIFICALLY
+; DISCLAIMS ANY WARRANTY OF MERCHANTABILITY, NONINFRINGEMENT, FITNESS FOR ANY
+; PARTICULAR PURPOSE, OR ANY OTHER WARRANTY.  Intel disclaims all liability,
+; including liability for infringement of any proprietary rights, relating to
+; use of the code. No license, express or implied, by estoppel or otherwise,
+; to any intellectual property rights is granted herein.
+;
+;=============================================================================
+
+;======================================================================
+; Installation INF for:
+; Intel(R) Dynamic Application Loader Host Interface
+; Intel(R) Management and Security Application Local Management
+; 
+; OEM Extension Sample INF
+;======================================================================
+[Version]
+Signature="$WINDOWS NT$"
+Class = Extension
+ClassGuid = {e2f84ce7-8efa-411c-aa69-97454ca4cb57}
+Provider=%ManufacturerName%
+ExtensionId = {BABE2782-EB1B-46A7-871A-F043D3200542}
+CatalogFile=OemExtension.cat
+DriverVer = 06/13/2019,1924.4.0.1062
+
+[Manufacturer]
+%ManufacturerName%=Intel,NTx86.10.0, NTamd64.10.0
+
+
+[Intel.NTx86.10.0]
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_9D3A           ;ME11.x - SKL/SPT-LP, KBL/SPT-LP
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_A2BA           ;ME11.6 - KBL/KBP-S
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_A1BA           ;ME11.x - Purley WS SKL/LBG - Production
+%OEM.ExtensionDesc% = OEMExtInstallSection_no_lms, PCI\VEN_8086&DEV_5A9A    ;BXT-P
+%OEM.ExtensionDesc% = OEMExtInstallSection_no_lms, PCI\VEN_8086&DEV_319A    ;GLK
+
+[Intel.NTamd64.10.0]
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_9D3A           ;ME11.x - SKL/SPT-LP, KBL/SPT-LP
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_A2BA           ;ME11.6 - KBL/KBP-S
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_A1BA           ;ME11.x - Purley WS SKL/LBG - Production
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_9DE0           ;ME12.0 - CNL/CNP-LP
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_A360           ;ME12.0 - CNL-H
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_3DE0           ;ME13.0 - ICL-H
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_34E0           ;ME13.0 - ICL-LP
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_38E0           ;ME13.0 - ICL-LP
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_18D3   		;ME13.0 - CDF
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_02E0   		;ME14.0 - CML
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_06E0   		;ME14.0 - CML
+%OEM.ExtensionDesc% = OEMExtInstallSection, PCI\VEN_8086&DEV_A0E0 		;ME15.0 - TGL 
+%OEM.ExtensionDesc% = OEMExtInstallSection_no_lms, PCI\VEN_8086&DEV_5A9A    ;BXT-P
+%OEM.ExtensionDesc% = OEMExtInstallSection_no_lms, PCI\VEN_8086&DEV_319A    ;GLK
+
+
+[Intel]
+;
+
+
+[OEMExtInstallSection.NT]
+
+[OEMExtInstallSection.NT.Components]
+AddComponent = OEM_DAL_component,,OEMExt_DALComponentInstall
+AddComponent = OEM_LMS_component,,OEMExt_LMSComponentInstall
+AddComponent = OEM_ICLS_component,,OEMExt_ICLSComponentInstall
+
+[OEMExtInstallSection_no_lms.NT]
+
+[OEMExtInstallSection_no_lms.NT.Components]
+AddComponent = OEM_DAL_component,,OEMExt_DALComponentInstall
+AddComponent = OEM_DALWC_component,,OEMExt_DALWCComponentInstall
+AddComponent = OEM_ICLS_component,,OEMExt_ICLSComponentInstall
+
+
+[OEMExt_DALComponentInstall]
+ComponentIds=3C4852D6-D47B-4F46-B05E-B5EDC1AA440E ;DAL
+
+[OEMExt_DALWCComponentInstall]
+ComponentIds=DBA4D603-D7ED-4931-8823-17AD585705D5 ;DAL-WC
+
+[OEMExt_LMSComponentInstall]
+ComponentIds=5DCEB103-DD64-403C-A17C-94FC5F917A9C	;LMS
+
+[OEMExt_ICLSComponentInstall]
+ComponentIds=PROVIDER_INTEL_COMPONENT_ICLSCLIENT
+
+[Strings]
+ManufacturerName="Intel"
+OEM.ExtensionDesc = "Intel(R) ME Extension INF"
+REG_EXPAND_SZ = 0x00020000
+FLG_ADDREG_KEYONLY = 0x00000010

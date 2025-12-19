@@ -1,0 +1,292 @@
+;----------------------------------------------------------------------------
+;   AM USB Storage Driver
+;----------------------------------------------------------------------------
+[Version]
+Signature="$WINDOWS NT$"
+Class=USB
+ClassGUID={36FC9E60-C465-11CF-8056-444553540000}
+Provider=%VENDOR%
+DriverVer = 04/22/2020,2.0.152.10130
+CatalogFile=AmUStorU.cat
+;----------------------------------------------------------------------------
+;   Manufacturer and Product Information
+;----------------------------------------------------------------------------
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%VENDOR%=DeviceList,NTamd64.10.0
+
+[DeviceList.NTamd64.10.0]
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6332
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6335
+%U2DeviceDesc%=DriverInstall_6361, USB\VID_058F&PID_6361
+%U2DeviceDesc%=DriverInstall_6362, USB\VID_058F&PID_6362
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6363&MI_00
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6364&MI_00
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6466&MI_00
+%U2DeviceDesc%=DriverInstall_6366, USB\VID_058F&PID_6366
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6369
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6377
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6465
+
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6462
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6464&MI_00
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6477&MI_00
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6478
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6458&MI_00
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6459
+
+%U2DeviceDesc%=DriverInstall_6339, USB\VID_058F&PID_6339
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6381
+%U2DeviceDesc%=DriverInstall,      USB\VID_058F&PID_6385
+
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8434&MI_00
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8431
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8432
+
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8461
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8462
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8463
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8464
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8465
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8466
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8467
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8468
+
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_8469
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_846A
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_846B
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_846C
+%U3DeviceDesc%=DriverInstall,      USB\VID_058F&PID_846D
+
+%U2DeviceDesc%=DriverInstall,      USB\VID_2CE3&PID_6487
+
+;----------------------------------------------------------------------------
+;   CopyFile Sections
+;----------------------------------------------------------------------------
+; Windows NT Copy List Section
+[SourceDisksNames]
+1= %DISK_NAME%
+
+[SourceDisksFiles]
+AmUStorU.sys=1
+AmRdrIco.icl=1
+
+[DestinationDirs]
+CopyFilesSYS = 10, system32\drivers
+CopyFilesIcon = 11
+
+;----------------------------------------------------------------------------
+;
+;----------------------------------------------------------------------------
+
+[DriverInstall]
+CopyFiles=CopyFilesSYS, CopyFilesIcon
+AddReg = AmUStor_Config_OverridesKey
+
+[DriverInstall_6366]
+CopyFiles=CopyFilesSYS, CopyFilesIcon
+AddReg = AmUStor_Config_OverridesKey, AmUSTor_Config_6366
+
+[DriverInstall_6362]
+CopyFiles=CopyFilesSYS, CopyFilesIcon
+AddReg = AmUStor_Config_OverridesKey, AmUSTor_Config_6362
+
+[DriverInstall_6361]
+CopyFiles=CopyFilesSYS, CopyFilesIcon
+AddReg = AmUStor_Config_OverridesKey, AmUSTor_Config_6361
+
+[DriverInstall_6339]
+CopyFiles=CopyFilesSYS, CopyFilesIcon
+AddReg = AmUStor_Config_OverridesKey, AmUSTor_Config_6339
+
+;--------------------------------------
+[CopyFilesSYS]
+AmUStorU.sys
+
+[CopyFilesIcon]
+AmRdrIco.icl
+
+;----------------------------------------------------------------------------
+; Hardware Key
+;----------------------------------------------------------------------------
+;DriverInstall.HW]
+;ddReg = AmUSTor_Config
+
+;----------------------------------------------------------------------------
+;   Configuration
+;----------------------------------------------------------------------------
+[AmUStor_Config_OverridesKey]
+HKLM,System\CurrentControlSet\Control\DeviceOverrides\USB#VID_058F&PID_6339\LocationPaths\*,Removable,0x10001,0
+HKLM,System\CurrentControlSet\Control\DeviceOverrides\USB#VID_058F&PID_6361\LocationPaths\*,Removable,0x10001,0
+HKLM,System\CurrentControlSet\Control\DeviceOverrides\USB#VID_058F&PID_6362\LocationPaths\*,Removable,0x10001,0
+HKLM,System\CurrentControlSet\Control\DeviceOverrides\USB#VID_058F&PID_6366\LocationPaths\*,Removable,0x10001,0
+
+[AmUSTor_Config_6366]
+HKR,,"uExtDrvLoadIntSetting", %REG_DWORD%, 1
+HKR,,"uExtIsS0IdleMode", %REG_DWORD%, 1
+HKR,,"uExtUsbS0IdleTime", %REG_DWORD%, 5
+HKR,,"sExtSquelchLevelCapability", %REG_SZ%, "*"
+
+[AmUSTor_Config_6362]
+HKR,,"uExtDrvLoadIntSetting", %REG_DWORD%, 1
+HKR,,"uExtIsS0IdleMode", %REG_DWORD%, 1
+HKR,,"uExtUsbS0IdleTime", %REG_DWORD%, 5
+
+[AmUSTor_Config_6361]
+HKR,,"uIsRtMode", %REG_DWORD%, 1
+HKR,,"uIsSsMode", %REG_DWORD%, 1
+HKR,,"uIsNoSafeRemove", %REG_DWORD%, 0
+HKR,,"uUsbSsTime", %REG_DWORD%, 30
+HKR,,"uUsbEnWaitWake", %REG_DWORD%, 1
+HKR,,"sChkDevSn", %REG_SZ%, 058F63616479
+HKR,,"uEnChkEject", %REG_DWORD%, 0
+
+HKR,,"uExtResumeCardChgReGenDiskForSafeRmv", %REG_DWORD%, 1
+HKR,,"uExtResumeCardChgReGenDiskForEject", %REG_DWORD%, 1
+HKR,,"uExtResumeForceReset", %REG_DWORD%, 1
+
+HKR,,"uExtResumeReGenDiskForSafeRmv", %REG_DWORD%, 0
+HKR,,"uExtResumeReGenDiskForEject", %REG_DWORD%, 0
+
+HKR,,"bExtLunCardDetectInfo", %REG_BINARY%, 0x02, 0x19, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+HKR,,"uExtSetFriendlyName", %REG_DWORD%, 1
+
+HKR,,"uExtDisableDiskHideSafeRmv", %REG_DWORD%, 1
+
+HKR,,"uExtModifyPowerFlow", %REG_DWORD%, 0
+
+HKR,,"uExtSetPdoRemovableMediaChar", %REG_DWORD%, 0
+
+HKR,,"sExtCard0Text", %REG_SZ%, SD/MMC Card
+HKR,,"sExtCard1Text", %REG_SZ%, CF Card
+HKR,,"sExtCard3Text", %REG_SZ%, MS Card
+HKR,,"sExtCard4Text", %REG_SZ%, xD Card
+
+HKR,,"uExtSdCardDetect", %REG_DWORD%, 1
+HKR,,"sExtCardMmcText", %REG_SZ%, MMC Card
+HKR,,"sExtCardSdText", %REG_SZ%, SD Card
+HKR,,"sExtCardSdhcText", %REG_SZ%, SDHC Card
+HKR,,"sExtCardSdxcText", %REG_SZ%, SDXC Card
+
+HKR,,"uIsEnableIcon", %REG_DWORD%, 1
+HKR,,"uShareLunMask", %REG_DWORD%, 2
+
+HKR,,"sLabelCard0", %REG_SZ%, MMC
+HKR,,"sIconsCard0", %REG_SZ%, "%%SystemRoot%%\system32\AmRdrIco.icl,9"
+HKR,,"sLabelCard3", %REG_SZ%, MS
+HKR,,"sIconsCard3", %REG_SZ%, "%%SystemRoot%%\system32\AmRdrIco.icl,13"
+HKR,,"sLabelCard4", %REG_SZ%, xD
+HKR,,"sIconsCard4", %REG_SZ%, "%%SystemRoot%%\system32\AmRdrIco.icl,31"
+
+HKR,,"sLabelSD", %REG_SZ%, SD
+HKR,,"sIconsSD", %REG_SZ%, "%%SystemRoot%%\system32\AmRdrIco.icl,21"
+HKR,,"sLabelSDHC", %REG_SZ%, SDHC
+HKR,,"sIconsSDHC", %REG_SZ%, "%%SystemRoot%%\system32\AmRdrIco.icl,23"
+HKR,,"sLabelSDXC", %REG_SZ%, SDXC
+HKR,,"sIconsSDXC", %REG_SZ%, "%%SystemRoot%%\system32\AmRdrIco.icl,25"
+
+HKR,,"sLabelLun1", %REG_SZ%, Multi
+
+
+HKR,,"sLabelLun0", %REG_SZ%, CF
+HKR,,"sIconsLun0", %REG_SZ%, "%%SystemRoot%%\system32\AmRdrIco.icl,1"
+
+HKR,,"uExtIsS0IdleMode", %REG_DWORD%, 1
+HKR,,"uExtUsbS0IdleTime", %REG_DWORD%, 5
+
+[AmUSTor_Config_6339]
+HKR,,"uIsRtMode", %REG_DWORD%, 1
+HKR,,"uIsSsMode", %REG_DWORD%, 1
+HKR,,"uIsNoSafeRemove", %REG_DWORD%, 0
+HKR,,"uUsbSsTime", %REG_DWORD%, 30
+HKR,,"uUsbEnWaitWake", %REG_DWORD%, 1
+HKR,,"sChkDevSn", %REG_SZ%, 058F63396479
+HKR,,"uEnChkEject", %REG_DWORD%, 0
+
+HKR,,"uExtResumeCardChgReGenDiskForSafeRmv", %REG_DWORD%, 1
+HKR,,"uExtResumeCardChgReGenDiskForEject", %REG_DWORD%, 1
+HKR,,"uExtResumeForceReset", %REG_DWORD%, 1
+
+HKR,,"uExtResumeReGenDiskForSafeRmv", %REG_DWORD%, 0
+HKR,,"uExtResumeReGenDiskForEject", %REG_DWORD%, 0
+
+HKR,,"bExtLunCardDetectInfo", %REG_BINARY%, 0x02, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00
+HKR,,"uExtSetFriendlyName", %REG_DWORD%, 1
+
+HKR,,"uExtDisableDiskHideSafeRmv", %REG_DWORD%, 1
+
+HKR,,"uExtModifyPowerFlow", %REG_DWORD%, 0
+
+HKR,,"uExtSetPdoRemovableMediaChar", %REG_DWORD%, 0
+
+HKR,,"sExtCard0Text", %REG_SZ%, SD/MMC Card
+HKR,,"sExtCard1Text", %REG_SZ%, CF Card
+HKR,,"sExtCard3Text", %REG_SZ%, MS Card
+
+HKR,,"bExtVendorCmd0", %REG_BINARY%, \
+	0x01, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, \
+    0xC7, 0x1F, 0x05, 0x8F, 0xC7, 0x84, 0x30, 0x35, 0x38, 0x46, 0x03, 0x02, 0x19, 0x04, 0x00, 0x00
+
+HKR,,"uExtChkFwHiForVenCmd0", %REG_DWORD%, 0x118
+HKR,,"uExtChkFwLoForVenCmd0", %REG_DWORD%, 0x118
+
+HKR,,"uExtIsS0IdleMode", %REG_DWORD%, 1
+HKR,,"uExtUsbS0IdleTime", %REG_DWORD%, 5
+
+;----------------------------------------------------------------------------
+;   Serives Key
+;----------------------------------------------------------------------------
+
+[DriverInstall.Services]
+Addservice = AmUStor, 0x00000002, DriverService
+
+[DriverInstall_6366.Services]
+Addservice = AmUStor, 0x00000002, DriverService
+
+[DriverInstall_6362.Services]
+Addservice = AmUStor, 0x00000002, DriverService
+
+[DriverInstall_6361.Services]
+Addservice = AmUStor, 0x00000002, DriverService
+
+[DriverInstall_6339.Services]
+Addservice = AmUStor, 0x00000002, DriverService
+
+;--------------------------------------
+[DriverService]
+DisplayName    = %SERVICE_NAME%
+ServiceType    = %SERVICE_TYPE_KERNEL_DRIVER%
+StartType      = %SERVICE_DEMAND_START%
+ErrorControl   = %SERVICE_ERROR_NORMAL%
+ServiceBinary  = %10%\system32\drivers\AmUStorU.sys
+
+;----------------------------------------------------------------------------
+;   String Definitions
+;----------------------------------------------------------------------------
+[Strings]
+DISK_NAME    = "Alcor Micro USB Mass Storage Driver Source Disk"
+VENDOR="Alcor Micro, Corp."
+SERVICE_NAME = "AM USB Stroage Driver"
+U2DeviceDesc = "Alcor Micro USB 2.0 Card Reader"
+U3DeviceDesc = "Alcor Micro USB 3.0 Card Reader"
+
+SERVICE_TYPE_KERNEL_DRIVER  = 0x1
+
+SERVICE_BOOT_START     = 0x0
+SERVICE_SYSTEM_START   = 0x1
+SERVICE_AUTO_START     = 0x2
+SERVICE_DEMAND_START   = 0x3
+SERVICE_DISABLED       = 0x4
+
+SERVICE_ERROR_IGNORE   = 0x0
+SERVICE_ERROR_NORMAL   = 0x1
+SERVICE_ERROR_SEVERE   = 0x2
+SERVICE_ERROR_CRITICAL = 0x3
+
+REG_EXPAND_SZ          = 0x00020000
+REG_DWORD              = 0x00010001
+REG_MULTI_SZ           = 0x00010000
+REG_BINARY             = 0x00000001
+REG_SZ                 = 0x00000000
