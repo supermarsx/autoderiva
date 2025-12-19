@@ -57,7 +57,9 @@ param(
 
     # Driver scan behavior
     [switch]$ScanOnlyMissingDrivers,
+    [switch]$ScanOnlyProblemDevices,
     [switch]$ScanAllDevices,
+    [int[]]$ProblemDeviceCodes,
 
     # Export helpers
     [string]$ExportUnknownDevicesCsv,
@@ -806,8 +808,12 @@ if ($PSBoundParameters.Count -gt 0) {
     if ($PSBoundParameters.ContainsKey('HashVerifyMaxConcurrency') -and $HashVerifyMaxConcurrency -gt 0) { $Config.HashVerifyMaxConcurrency = $HashVerifyMaxConcurrency }
 
     # Driver scan toggles
-    if ($PSBoundParameters.ContainsKey('ScanOnlyMissingDrivers')) { $Config.ScanOnlyMissingDrivers = $true }
-    if ($PSBoundParameters.ContainsKey('ScanAllDevices')) { $Config.ScanOnlyMissingDrivers = $false }
+    if ($PSBoundParameters.ContainsKey('ScanOnlyMissingDrivers')) { $Config.ScanOnlyMissingDrivers = $true; $Config.ScanOnlyProblemDevices = $false }
+    if ($PSBoundParameters.ContainsKey('ScanOnlyProblemDevices')) { $Config.ScanOnlyProblemDevices = $true; $Config.ScanOnlyMissingDrivers = $false }
+    if ($PSBoundParameters.ContainsKey('ScanAllDevices')) { $Config.ScanOnlyMissingDrivers = $false; $Config.ScanOnlyProblemDevices = $false }
+    if ($PSBoundParameters.ContainsKey('ProblemDeviceCodes') -and $null -ne $ProblemDeviceCodes -and @($ProblemDeviceCodes).Count -gt 0) {
+        $Config.ProblemDeviceCodes = @($ProblemDeviceCodes)
+    }
 
     # Wi-Fi cleanup toggles
     if ($PSBoundParameters.ContainsKey('ClearWifiAndExit')) { $Script:ExitAfterWifiCleanup = $true; $Config.ClearWifiProfiles = $true }
@@ -885,7 +891,9 @@ Options:
     -HashVerifyMaxConcurrency <n>Max parallel hash workers when HashVerifyMode=Parallel (default from config: $($Config.HashVerifyMaxConcurrency)).
 
     -ScanOnlyMissingDrivers      Only scan devices missing drivers (default from config: $($Config.ScanOnlyMissingDrivers)).
-    -ScanAllDevices              Scan all present devices (overrides ScanOnlyMissingDrivers; default: disabled).
+    -ScanOnlyProblemDevices      Only scan devices with specific problem codes (overrides ScanOnlyMissingDrivers; default from config: $($Config.ScanOnlyProblemDevices)).
+    -ProblemDeviceCodes <int[]>  Problem codes used when ScanOnlyProblemDevices is enabled (default from config: $($Config.ProblemDeviceCodes)).
+    -ScanAllDevices              Scan all present devices (overrides ScanOnlyMissingDrivers and ScanOnlyProblemDevices; default: disabled).
 
     -ExportUnknownDevicesCsv <path> Export devices missing drivers (ProblemCode 28) to a CSV file and exit.
 
@@ -2293,6 +2301,28 @@ function Get-DeviceProblemCode {
     return $null
 }
 
+function ConvertTo-ConfigManagerErrorCodeFilter {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][int[]]$Codes
+    )
+
+    $normalizedCodes = @(
+        $Codes |
+            ForEach-Object { try { [int]$_ } catch { $null } } |
+            Where-Object { $null -ne $_ -and $_ -ge 0 } |
+            Select-Object -Unique |
+            Sort-Object
+    )
+
+    if ($normalizedCodes.Count -eq 0) {
+        throw 'ProblemCodes is empty after normalization.'
+    }
+
+    if ($normalizedCodes.Count -eq 1) { return "ConfigManagerErrorCode=$($normalizedCodes[0])" }
+    return (@($normalizedCodes | ForEach-Object { "ConfigManagerErrorCode=$([int]$_)" }) -join ' OR ')
+}
+
 function Get-MissingDriverDevice {
     # .SYNOPSIS
     #     Filters devices to those missing drivers.
@@ -2307,16 +2337,27 @@ function Get-MissingDriverDevice {
     # .OUTPUTS
     #     Object[]. Subset of the input device objects.
     param(
-        [Parameter(Mandatory = $true)]$SystemDevices
+        [Parameter(Mandatory = $true)]$SystemDevices,
+        [int[]]$ProblemCodes = @(28)
     )
 
     $devices = @($SystemDevices | Where-Object { $_ -and ($_.PSObject.Properties.Name -contains 'InstanceId') -and $_.InstanceId })
     if ($devices.Count -eq 0) { return @() }
 
-    # Prefer CIM for detecting missing-driver devices. This is generally available on
+    $normalizedCodes = @(
+        $ProblemCodes |
+            ForEach-Object { try { [int]$_ } catch { $null } } |
+            Where-Object { $null -ne $_ -and $_ -ge 0 } |
+            Select-Object -Unique |
+            Sort-Object
+    )
+    if ($normalizedCodes.Count -eq 0) { return @() }
+
+    # Prefer CIM for detecting devices by problem code(s). This is generally available on
     # Windows PowerShell 5.1+ and avoids slow per-device Get-PnpDeviceProperty calls.
     try {
-        $cimMissing = @(Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode=28' -ErrorAction Stop)
+        $filter = ConvertTo-ConfigManagerErrorCodeFilter -Codes $normalizedCodes
+        $cimMissing = @(Get-CimInstance -ClassName Win32_PnPEntity -Filter $filter -ErrorAction Stop)
         $cimMissing = @($cimMissing | Where-Object { $_ })
 
         # Convert CIM results to InstanceIds and intersect with the provided Get-PnpDevice list.
@@ -2331,7 +2372,7 @@ function Get-MissingDriverDevice {
         return $missing
     }
     catch {
-        Write-Verbose "CIM missing-driver filter unavailable; falling back to per-device ProblemCode scan. Error: $_"
+        Write-Verbose "CIM problem-code filter unavailable; falling back to per-device ProblemCode scan. Error: $_"
     }
 
     $showScanProgress = $true
@@ -2369,6 +2410,9 @@ function Get-MissingDriverDevice {
     }
 
     if ($maxConcurrency -le 1) {
+        $problemCodeSet = [System.Collections.Generic.HashSet[int]]::new()
+        foreach ($pc in $normalizedCodes) { $null = $problemCodeSet.Add([int]$pc) }
+
         $results = @()
         $done = 0
         foreach ($dev in $devices) {
@@ -2383,7 +2427,11 @@ function Get-MissingDriverDevice {
             }
         }
 
-        $missingInstanceIds = @($results | Where-Object { $_ -and $_.ProblemCode -eq 28 } | ForEach-Object { $_.InstanceId })
+        $missingInstanceIds = @(
+            $results |
+                Where-Object { $_ -and $null -ne $_.ProblemCode -and $problemCodeSet.Contains([int]$_.ProblemCode) } |
+                ForEach-Object { $_.InstanceId }
+        )
         if ($missingInstanceIds.Count -eq 0) { return @() }
 
         $missing = @()
@@ -2453,7 +2501,14 @@ function Get-MissingDriverDevice {
         }
     }
 
-    $missingInstanceIds = @($results | Where-Object { $_ -and $_.ProblemCode -eq 28 } | ForEach-Object { $_.InstanceId })
+    $problemCodeSet = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($pc in $normalizedCodes) { $null = $problemCodeSet.Add([int]$pc) }
+
+    $missingInstanceIds = @(
+        $results |
+            Where-Object { $_ -and $null -ne $_.ProblemCode -and $problemCodeSet.Contains([int]$_.ProblemCode) } |
+            ForEach-Object { $_.InstanceId }
+    )
     if ($missingInstanceIds.Count -eq 0) { return @() }
 
     $missing = @()
@@ -2474,12 +2529,15 @@ function Get-MissingDriverDevicesDirect {
     #
     #     Returns $null if no fast method is available.
     [CmdletBinding()]
-    param()
+    param(
+        [int[]]$ProblemCodes = @(28)
+    )
 
     # Preferred: CIM filter. This avoids per-device DEVPKEY queries.
     # Get-CimInstance returns $null on 0 results, so we normalize to @().
     try {
-        $m = @(Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode=28' -ErrorAction Stop)
+        $filter = ConvertTo-ConfigManagerErrorCodeFilter -Codes $ProblemCodes
+        $m = @(Get-CimInstance -ClassName Win32_PnPEntity -Filter $filter -ErrorAction Stop)
         return @($m | Where-Object { $_ })
     }
     catch {
@@ -2490,8 +2548,11 @@ function Get-MissingDriverDevicesDirect {
     try {
         $cmd = Get-Command Get-PnpDevice -ErrorAction Stop
         if ($cmd -and $cmd.Parameters -and $cmd.Parameters.ContainsKey('Problem')) {
-            $m = @(Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop)
-            return @($m | Where-Object { $_ })
+            $codes = @($ProblemCodes | ForEach-Object { try { [int]$_ } catch { $null } } | Where-Object { $null -ne $_ })
+            if ($codes.Count -eq 1) {
+                $m = @(Get-PnpDevice -PresentOnly -Problem ([int]$codes[0]) -ErrorAction Stop)
+                return @($m | Where-Object { $_ })
+            }
         }
     }
     catch {
@@ -2523,22 +2584,54 @@ function Get-SystemHardware {
         return $ids
     }
 
-    $effectiveOnlyMissing = $false
+    $effectiveProblemCodes = $null
+    $effectiveScanLabel = 'active'
+
     if (-not $AllDevices) {
-        try { $effectiveOnlyMissing = [bool]$Config.ScanOnlyMissingDrivers } catch { $effectiveOnlyMissing = $false }
+        $onlyProblem = $false
+        try { $onlyProblem = [bool]$Config.ScanOnlyProblemDevices } catch { $onlyProblem = $false }
+
+        if ($onlyProblem) {
+            $effectiveScanLabel = 'problem'
+            $codes = @()
+            try { $codes = @($Config.ProblemDeviceCodes) } catch { $codes = @() }
+            if ($codes.Count -eq 0) {
+                $codes = @(1, 10, 14, 18, 28, 31, 32, 33, 35, 37, 39, 43, 48)
+            }
+            $effectiveProblemCodes = @(
+                $codes |
+                    ForEach-Object { try { [int]$_ } catch { $null } } |
+                    Where-Object { $null -ne $_ -and $_ -ge 0 } |
+                    Select-Object -Unique
+            )
+        }
+        else {
+            $onlyMissing = $false
+            try { $onlyMissing = [bool]$Config.ScanOnlyMissingDrivers } catch { $onlyMissing = $false }
+            if ($onlyMissing) {
+                $effectiveScanLabel = 'missing-driver'
+                $effectiveProblemCodes = @(28)
+            }
+        }
     }
 
     $SystemDevices = $null
-    if ($effectiveOnlyMissing) {
-        # Avoid expensive per-device ProblemCode scanning when possible.
-        $directMissing = $null
-        try { $directMissing = Get-MissingDriverDevicesDirect } catch { $directMissing = $null }
-        if ($null -ne $directMissing) {
-            $SystemDevices = $directMissing
-            Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28) via direct query." "Gray"
+    if ($null -ne $effectiveProblemCodes) {
+        # Bulk query first.
+        $direct = $null
+        try { $direct = Get-MissingDriverDevicesDirect -ProblemCodes $effectiveProblemCodes } catch { $direct = $null }
+
+        if ($null -ne $direct) {
+            $SystemDevices = $direct
+            if ($effectiveScanLabel -eq 'missing-driver') {
+                Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28) via direct query." "Gray"
+            }
+            else {
+                Write-AutoDerivaLog "INFO" "Filtering to devices with problem codes via direct query: $(@($effectiveProblemCodes | Sort-Object) -join ', ')" "Gray"
+            }
         }
         else {
-            # Fallback: query all devices then compute missing-driver subset.
+            # Fallback: query all devices then compute subset.
             try {
                 $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
                 if (-not $SystemDevices) { throw "Get-PnpDevice returned no results." }
@@ -2547,9 +2640,13 @@ function Get-SystemHardware {
                 throw "Failed to query system devices: $_"
             }
 
-            $missingDevices = Get-MissingDriverDevice -SystemDevices $SystemDevices
-            Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28)." "Gray"
-            $SystemDevices = $missingDevices
+            $SystemDevices = Get-MissingDriverDevice -SystemDevices $SystemDevices -ProblemCodes $effectiveProblemCodes
+            if ($effectiveScanLabel -eq 'missing-driver') {
+                Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28)." "Gray"
+            }
+            else {
+                Write-AutoDerivaLog "INFO" "Filtering to devices with problem codes: $(@($effectiveProblemCodes | Sort-Object) -join ', ')" "Gray"
+            }
         }
     }
     else {
@@ -2562,41 +2659,32 @@ function Get-SystemHardware {
         }
     }
 
-    # NOTE: when ScanOnlyMissingDrivers=true, this is the set of HWIDs for devices missing drivers.
     $SystemHardwareIds = $SystemDevices.HardwareID | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
     $Script:Stats.DriversScanned = $SystemHardwareIds.Count
-    if ($effectiveOnlyMissing) {
+
+    if ($effectiveScanLabel -eq 'missing-driver') {
         Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) hardware ID(s) for missing-driver devices." "Green"
+    }
+    elseif ($effectiveScanLabel -eq 'problem') {
+        Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) hardware ID(s) for problem devices." "Green"
     }
     else {
         Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
     }
+
     return $SystemHardwareIds
 }
 
 function Get-UnknownDriverDeviceCount {
-    # .SYNOPSIS
-    #     Counts how many present devices are missing drivers.
-    #
-    # .DESCRIPTION
-    #     Computes the number of present devices with ProblemCode 28. A test hook
-    #     (`$Script:Test_GetUnknownDriverCount`) can override the computation.
-    #
-    # .OUTPUTS
-    #     Int32.
     # "Unknown" here means devices still missing drivers (ProblemCode 28)
     try {
         if ($Script:Test_GetUnknownDriverCount) {
             return [int](& $Script:Test_GetUnknownDriverCount)
         }
 
-        # Prefer a single fast query when supported.
         try {
-            $cmd = Get-Command Get-PnpDevice -ErrorAction Stop
-            if ($cmd -and $cmd.Parameters -and $cmd.Parameters.ContainsKey('Problem')) {
-                $m = Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop
-                return [int](@($m).Count)
-            }
+            $m = @(Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode=28' -ErrorAction Stop)
+            return [int](@($m | Where-Object { $_ }).Count)
         }
         catch {
             Write-Verbose "Fast unknown-driver count unavailable; falling back. Error: $_"
