@@ -113,7 +113,8 @@ For the full key reference (types, defaults, and notes), see `docs/configuration
 | `LogRetentionDays` | integer | `10` | Delete log files older than this many days. Set to `0` to disable age-based cleanup. |
 | `MaxLogFiles` | integer | `15` | Keep at most this many log files (newest kept). Set to `0` to disable count-based cleanup. |
 | `DownloadAllFiles` | boolean | `false` | If `true`, downloads *all* files from the manifest (useful for offline scenarios). |
-| `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Relative path (from `BaseUrl`) to the Cuco utility binary. |
+| `CucoDownloadUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Primary URL to download the Cuco binary from. If this fails, AutoDeriva falls back to `BaseUrl + CucoBinaryPath`. |
+| `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Fallback relative path (from `BaseUrl`) to the Cuco utility binary, used when `CucoDownloadUrl` is unavailable. |
 | `DownloadCuco` | boolean | `true` | If `true`, the Cuco utility is downloaded to the target directory. |
 | `CucoTargetDir` | string | `Desktop` | Where to place the Cuco binary. `Desktop` resolves to the original user's Desktop folder when possible. |
 | `AskBeforeDownloadCuco` | boolean | `false` | When `true`, asks for confirmation before downloading Cuco. Default is `false` (no prompt). |

@@ -511,6 +511,7 @@ $DefaultConfig = @{
     LogRetentionDays                  = 10
     MaxLogFiles                       = 15
     DownloadAllFiles                  = $false
+    CucoDownloadUrl                   = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
     CucoBinaryPath                    = "cuco/CtoolGui.exe"
     DownloadCuco                      = $true
     CucoTargetDir                     = "Desktop"
@@ -2822,24 +2823,59 @@ function Install-Cuco {
     }
 
     $CucoDest = Join-Path $TargetDir "CtoolGui.exe"
-    $CucoUrl = $Config.BaseUrl + $Config.CucoBinaryPath
+    $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    try {
+        if ($Config.CucoDownloadUrl) { $primaryUrl = [string]$Config.CucoDownloadUrl }
+    }
+    catch {
+        $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    }
+
+    $fallbackUrl = $Config.BaseUrl + $Config.CucoBinaryPath
 
     Write-AutoDerivaLog "INFO" "Downloading Cuco utility to: $TargetDir" "Cyan"
-    
+
+    $downloaded = $false
+
+    Write-AutoDerivaLog 'INFO' "Trying Cuco primary source: $primaryUrl" 'Gray'
     try {
-        $ok = Invoke-DownloadFile -Url $CucoUrl -OutputPath $CucoDest
-        if ($ok -and (Test-Path $CucoDest)) {
-            $Script:Stats.CucoDownloaded++
-            Write-AutoDerivaLog "SUCCESS" "Cuco utility downloaded successfully." "Green"
-        }
-        else {
-            $Script:Stats.CucoDownloadFailed++
-            Write-AutoDerivaLog "ERROR" "Failed to verify Cuco download." "Red"
+        $okPrimary = Invoke-DownloadFile -Url $primaryUrl -OutputPath $CucoDest
+        if ($okPrimary -and (Test-Path $CucoDest)) {
+            $downloaded = $true
         }
     }
     catch {
+        Write-Verbose "Primary Cuco download failed: $_"
+    }
+
+    if (-not $downloaded) {
+        try {
+            if (Test-Path -LiteralPath $CucoDest) { Remove-Item -LiteralPath $CucoDest -Force -ErrorAction SilentlyContinue }
+        }
+        catch {
+            Write-Verbose "Failed to remove partial Cuco download before fallback: $_"
+        }
+
+        Write-AutoDerivaLog 'WARN' 'Primary Cuco source unavailable. Falling back to repo copy.' 'Yellow'
+        Write-AutoDerivaLog 'INFO' "Trying Cuco fallback URL: $fallbackUrl" 'Gray'
+        try {
+            $okFallback = Invoke-DownloadFile -Url $fallbackUrl -OutputPath $CucoDest
+            if ($okFallback -and (Test-Path $CucoDest)) {
+                $downloaded = $true
+            }
+        }
+        catch {
+            Write-Verbose "Fallback Cuco download failed: $_"
+        }
+    }
+
+    if ($downloaded) {
+        $Script:Stats.CucoDownloaded++
+        Write-AutoDerivaLog 'SUCCESS' 'Cuco utility downloaded successfully.' 'Green'
+    }
+    else {
         $Script:Stats.CucoDownloadFailed++
-        Write-AutoDerivaLog "ERROR" "Failed to download Cuco: $_" "Red"
+        Write-AutoDerivaLog 'ERROR' 'Failed to download Cuco from both primary and fallback sources.' 'Red'
     }
 }
 

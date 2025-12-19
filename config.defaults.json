@@ -9,6 +9,7 @@
     "LogRetentionDays": 10,
     "MaxLogFiles": 15,
     "DownloadAllFiles": false,
+    "CucoDownloadUrl": "https://cuco.inforlandia.pt/uagent/CtoolGui.exe",
     "CucoBinaryPath": "cuco/CtoolGui.exe",
     "DownloadCuco": true,
     "CucoTargetDir": "Desktop",
