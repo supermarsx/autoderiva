@@ -2309,10 +2309,10 @@ function ConvertTo-ConfigManagerErrorCodeFilter {
 
     $normalizedCodes = @(
         $Codes |
-            ForEach-Object { try { [int]$_ } catch { $null } } |
-            Where-Object { $null -ne $_ -and $_ -ge 0 } |
-            Select-Object -Unique |
-            Sort-Object
+        ForEach-Object { try { [int]$_ } catch { $null } } |
+        Where-Object { $null -ne $_ -and $_ -ge 0 } |
+        Select-Object -Unique |
+        Sort-Object
     )
 
     if ($normalizedCodes.Count -eq 0) {
@@ -2346,10 +2346,10 @@ function Get-MissingDriverDevice {
 
     $normalizedCodes = @(
         $ProblemCodes |
-            ForEach-Object { try { [int]$_ } catch { $null } } |
-            Where-Object { $null -ne $_ -and $_ -ge 0 } |
-            Select-Object -Unique |
-            Sort-Object
+        ForEach-Object { try { [int]$_ } catch { $null } } |
+        Where-Object { $null -ne $_ -and $_ -ge 0 } |
+        Select-Object -Unique |
+        Sort-Object
     )
     if ($normalizedCodes.Count -eq 0) { return @() }
 
@@ -2429,8 +2429,8 @@ function Get-MissingDriverDevice {
 
         $missingInstanceIds = @(
             $results |
-                Where-Object { $_ -and $null -ne $_.ProblemCode -and $problemCodeSet.Contains([int]$_.ProblemCode) } |
-                ForEach-Object { $_.InstanceId }
+            Where-Object { $_ -and $null -ne $_.ProblemCode -and $problemCodeSet.Contains([int]$_.ProblemCode) } |
+            ForEach-Object { $_.InstanceId }
         )
         if ($missingInstanceIds.Count -eq 0) { return @() }
 
@@ -2506,8 +2506,8 @@ function Get-MissingDriverDevice {
 
     $missingInstanceIds = @(
         $results |
-            Where-Object { $_ -and $null -ne $_.ProblemCode -and $problemCodeSet.Contains([int]$_.ProblemCode) } |
-            ForEach-Object { $_.InstanceId }
+        Where-Object { $_ -and $null -ne $_.ProblemCode -and $problemCodeSet.Contains([int]$_.ProblemCode) } |
+        ForEach-Object { $_.InstanceId }
     )
     if ($missingInstanceIds.Count -eq 0) { return @() }
 
@@ -2600,9 +2600,9 @@ function Get-SystemHardware {
             }
             $effectiveProblemCodes = @(
                 $codes |
-                    ForEach-Object { try { [int]$_ } catch { $null } } |
-                    Where-Object { $null -ne $_ -and $_ -ge 0 } |
-                    Select-Object -Unique
+                ForEach-Object { try { [int]$_ } catch { $null } } |
+                Where-Object { $null -ne $_ -and $_ -ge 0 } |
+                Select-Object -Unique
             )
         }
         else {
