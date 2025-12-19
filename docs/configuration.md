@@ -73,6 +73,27 @@ Defaults shown below match `config.defaults.json`.
 | `DisableNewsAndInterestsAndWidgets` | boolean | `true` | If `true`, disables News/Interests (Win10 feeds policy + taskbar setting) and hides Widgets (Win11). |
 | `HideTaskbarSearch` | boolean | `true` | If `true`, hides the Search icon/box on the taskbar. |
 
+## Preflight checks
+
+These keys control the "Preflight Checks" section shown at startup.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `PreflightEnabled` | boolean | `true` | Master switch for all preflight checks. |
+| `PreflightCheckAdmin` | boolean | `true` | If `true`, prints whether the script is running elevated. |
+| `PreflightCheckLogWritable` | boolean | `true` | If `true`, attempts a best-effort write to the current log file (when logging is enabled). |
+| `PreflightCheckNetwork` | boolean | `true` | If `true`, runs network/DNS/HTTP checks (skipped automatically in `AUTODERIVA_TEST=1`). |
+| `PreflightHttpTimeoutMs` | integer | `4000` | Timeout in milliseconds for each HTTP preflight check. |
+| `PreflightCheckGitHub` | boolean | `true` | If `true`, checks connectivity to `https://github.com/`. |
+| `PreflightCheckBaseUrl` | boolean | `true` | If `true`, checks connectivity to the configured `BaseUrl` (HEAD with GET fallback). |
+| `PreflightCheckGoogle` | boolean | `true` | If `true`, checks connectivity to `https://www.google.com/generate_204`. |
+| `PreflightCheckCucoSite` | boolean | `true` | If `true`, checks reachability of the Cuco site URL below. |
+| `PreflightCucoUrl` | string | `https://cuco.inforlandia.pt/` | URL to check for Cuco reachability. |
+| `PreflightPingEnabled` | boolean | `true` | If `true`, runs an ICMP ping check (warn-only; ICMP can be blocked). |
+| `PreflightPingTarget` | string | `1.1.1.1` | Target hostname/IP for the ping check. |
+| `PreflightPingTimeoutMs` | integer | `2000` | Ping timeout (milliseconds). |
+| `PreflightPingLatencyWarnMs` | integer | `150` | Ping latency threshold (ms) that triggers a warning about potential slow connection. |
+
 ## Wi-Fi profile cleanup
 
 These keys control optional Wi-Fi profile cleanup at the end of the run (or via `-ClearWifiAndExit`).

@@ -538,6 +538,22 @@ $DefaultConfig = @{
     ShowOnlyNonZeroStats              = $true
     ShowBanner                        = $true
 
+    # Preflight checks
+    PreflightEnabled                  = $true
+    PreflightCheckAdmin               = $true
+    PreflightCheckLogWritable         = $true
+    PreflightCheckNetwork             = $true
+    PreflightHttpTimeoutMs            = 4000
+    PreflightCheckGitHub              = $true
+    PreflightCheckBaseUrl             = $true
+    PreflightCheckGoogle              = $true
+    PreflightCheckCucoSite            = $true
+    PreflightCucoUrl                  = 'https://cuco.inforlandia.pt/'
+    PreflightPingEnabled              = $true
+    PreflightPingTarget               = '1.1.1.1'
+    PreflightPingTimeoutMs            = 2000
+    PreflightPingLatencyWarnMs        = 150
+
     # Performance tweaks (Windows 10/11)
     DisableOneDriveStartup            = $true
     HideTaskViewButton                = $true
@@ -1827,7 +1843,19 @@ function Get-RemoteCsv {
 # .DESCRIPTION
 #     Checks for internet connectivity.
 function Test-PreFlight {
+    $preflightEnabled = $true
+    try { $preflightEnabled = [bool]$Config.PreflightEnabled } catch { $preflightEnabled = $true }
+    if (-not $preflightEnabled) { return }
+
     Write-Section 'Preflight Checks'
+
+    $httpTimeoutMs = 4000
+    try {
+        if ($Config.PreflightHttpTimeoutMs -and [int]$Config.PreflightHttpTimeoutMs -gt 0) {
+            $httpTimeoutMs = [int]$Config.PreflightHttpTimeoutMs
+        }
+    }
+    catch { $httpTimeoutMs = 4000 }
 
     $writeOk = {
         param([string]$Name, [string]$Detail)
@@ -1841,17 +1869,26 @@ function Test-PreFlight {
     }
     # Admin check
     $isAdmin = $false
+    $checkAdmin = $true
+    try { $checkAdmin = [bool]$Config.PreflightCheckAdmin } catch { $checkAdmin = $true }
     try {
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')
     }
     catch {
         $isAdmin = $false
     }
-    if ($isAdmin) { & $writeOk 'Admin' 'Running elevated' } else { & $writeWarn 'Admin' 'Not elevated (some operations may be skipped/fail)' }
+    if ($checkAdmin) {
+        if ($isAdmin) { & $writeOk 'Admin' 'Running elevated' } else { & $writeWarn 'Admin' 'Not elevated (some operations may be skipped/fail)' }
+    }
 
     # Log writable check (best-effort)
+    $checkLogWritable = $true
+    try { $checkLogWritable = [bool]$Config.PreflightCheckLogWritable } catch { $checkLogWritable = $true }
     try {
-        if (-not $Config.EnableLogging) {
+        if (-not $checkLogWritable) {
+            Write-AutoDerivaLog 'INFO' 'Logging: Skipped (disabled by config)' 'Gray'
+        }
+        elseif (-not $Config.EnableLogging) {
             Write-AutoDerivaLog 'INFO' 'Logging: Disabled (skipping log writable check)' 'Gray'
         }
         elseif (-not $LogFilePath) {
@@ -1887,7 +1924,16 @@ function Test-PreFlight {
     }
 
     # Network checks: keep fast; never fatal. Skipped in AUTODERIVA_TEST to avoid noisy/flaky CI.
-    if ($env:AUTODERIVA_TEST -eq '1') {
+    $checkNetwork = $true
+    try { $checkNetwork = [bool]$Config.PreflightCheckNetwork } catch { $checkNetwork = $true }
+    if (-not $checkNetwork) {
+        Write-AutoDerivaLog 'INFO' 'Network: Skipped (disabled by config)' 'Gray'
+        return
+    }
+
+    $allowNetworkInTest = $false
+    try { $allowNetworkInTest = [bool]$Script:Test_PreflightAllowInTest } catch { $allowNetworkInTest = $false }
+    if ($env:AUTODERIVA_TEST -eq '1' -and -not $allowNetworkInTest -and -not $Script:Test_InvokePreflightHttpCheck -and -not $Script:Test_InvokePreflightPing) {
         Write-AutoDerivaLog 'INFO' 'Network: Skipped (AUTODERIVA_TEST=1)' 'Gray'
         return
     }
@@ -1897,17 +1943,27 @@ function Test-PreFlight {
             [Parameter(Mandatory = $true)][string]$Name,
             [Parameter(Mandatory = $true)][string]$Url,
             [ValidateSet('GET', 'HEAD')][string]$Method = 'HEAD',
-            [int]$TimeoutMs = 4000
+            [int]$TimeoutMs = 4000,
+            [switch]$AllowGetFallback
         )
 
-        try {
+        if ($Script:Test_InvokePreflightHttpCheck) {
+            return & $Script:Test_InvokePreflightHttpCheck -Name $Name -Url $Url -Method $Method -TimeoutMs $TimeoutMs -AllowGetFallback:$AllowGetFallback
+        }
+
+        $doRequest = {
+            param([string]$ReqMethod)
             $req = [System.Net.HttpWebRequest]::Create($Url)
-            $req.Method = $Method
+            $req.Method = $ReqMethod
             $req.Timeout = $TimeoutMs
             $req.ReadWriteTimeout = $TimeoutMs
             $req.AllowAutoRedirect = $true
             $req.UserAgent = 'AutoDeriva-Preflight'
-            $resp = $req.GetResponse()
+            return $req.GetResponse()
+        }
+
+        try {
+            $resp = & $doRequest -ReqMethod $Method
             try {
                 $code = 0
                 try { $code = [int]$resp.StatusCode } catch { $code = 0 }
@@ -1923,8 +1979,45 @@ function Test-PreFlight {
             }
         }
         catch {
-            $msg = $_.Exception.Message
-            if ([string]::IsNullOrWhiteSpace($msg)) { $msg = 'Request failed' }
+            $statusMsg = $null
+            try {
+                if ($_.Exception -is [System.Net.WebException]) {
+                    $webResp = $_.Exception.Response
+                    if ($webResp -and ($webResp -is [System.Net.HttpWebResponse])) {
+                        $code = [int]$webResp.StatusCode
+                        $desc = [string]$webResp.StatusDescription
+                        $statusMsg = "HTTP $code $desc"
+                    }
+                }
+            }
+            catch {
+                $statusMsg = $null
+            }
+
+            if ($AllowGetFallback -and $Method -eq 'HEAD' -and ($statusMsg -match '^HTTP\s+(400|403|405)\b')) {
+                try {
+                    $resp2 = & $doRequest -ReqMethod 'GET'
+                    try {
+                        $code2 = 0
+                        try { $code2 = [int]$resp2.StatusCode } catch { $code2 = 0 }
+                        if ($code2 -ge 200 -and $code2 -lt 400) {
+                            & $writeOk $Name ("HTTP {0} (GET fallback)" -f $code2)
+                            return
+                        }
+                        & $writeWarn $Name ("HTTP {0} (GET fallback)" -f $code2)
+                        return
+                    }
+                    finally {
+                        try { $resp2.Close() } catch { Write-Verbose "Failed to close HTTP response for ${Name} (fallback): $_" }
+                    }
+                }
+                catch {
+                    Write-Verbose "Preflight HTTP GET fallback failed for ${Name}: $_"
+                }
+            }
+
+            $msg = $statusMsg
+            if ([string]::IsNullOrWhiteSpace($msg)) { $msg = $_.Exception.Message }
             & $writeWarn $Name $msg
         }
     }
@@ -1939,12 +2032,18 @@ function Test-PreFlight {
     }
 
     # GitHub (web) + GitHub content base (raw)
-    & $invokeHttpCheck -Name 'GitHub' -Url 'https://github.com' -Method 'HEAD' -TimeoutMs 4000
+    $checkGitHub = $true
+    try { $checkGitHub = [bool]$Config.PreflightCheckGitHub } catch { $checkGitHub = $true }
+    if ($checkGitHub) {
+        & $invokeHttpCheck -Name 'GitHub' -Url 'https://github.com/' -Method 'GET' -TimeoutMs $httpTimeoutMs
+    }
     try {
         $baseUrl = $null
         try { $baseUrl = [string]$Config.BaseUrl } catch { $baseUrl = $null }
-        if (-not [string]::IsNullOrWhiteSpace($baseUrl) -and ($baseUrl -match '^https?://')) {
-            & $invokeHttpCheck -Name 'GitHub (BaseUrl)' -Url $baseUrl -Method 'HEAD' -TimeoutMs 4000
+        $checkBaseUrl = $true
+        try { $checkBaseUrl = [bool]$Config.PreflightCheckBaseUrl } catch { $checkBaseUrl = $true }
+        if ($checkBaseUrl -and -not [string]::IsNullOrWhiteSpace($baseUrl) -and ($baseUrl -match '^https?://')) {
+            & $invokeHttpCheck -Name 'GitHub (BaseUrl)' -Url $baseUrl -Method 'HEAD' -TimeoutMs $httpTimeoutMs -AllowGetFallback
         }
     }
     catch {
@@ -1952,22 +2051,62 @@ function Test-PreFlight {
     }
 
     # Google (generate_204 is a lightweight connectivity endpoint)
-    & $invokeHttpCheck -Name 'Google' -Url 'https://www.google.com/generate_204' -Method 'GET' -TimeoutMs 4000
+    $checkGoogle = $true
+    try { $checkGoogle = [bool]$Config.PreflightCheckGoogle } catch { $checkGoogle = $true }
+    if ($checkGoogle) {
+        & $invokeHttpCheck -Name 'Google' -Url 'https://www.google.com/generate_204' -Method 'GET' -TimeoutMs $httpTimeoutMs
+    }
 
-    # Ping check (ICMP may be blocked; warn-only)
-    try {
-        $ping = New-Object System.Net.NetworkInformation.Ping
-        $reply = $ping.Send('1.1.1.1', 2000)
-        if ($reply -and $reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
-            & $writeOk 'Ping' ("1.1.1.1 in {0}ms" -f $reply.RoundtripTime)
-        }
-        else {
-            $status = if ($reply) { [string]$reply.Status } else { 'No reply' }
-            & $writeWarn 'Ping' $status
+    # Cuco reachability check
+    $checkCuco = $false
+    try { $checkCuco = [bool]$Config.PreflightCheckCucoSite } catch { $checkCuco = $false }
+    if ($checkCuco) {
+        $cucoUrl = 'https://cuco.inforlandia.pt/'
+        try { if ($Config.PreflightCucoUrl) { $cucoUrl = [string]$Config.PreflightCucoUrl } } catch { $cucoUrl = 'https://cuco.inforlandia.pt/' }
+        if (-not [string]::IsNullOrWhiteSpace($cucoUrl)) {
+            & $invokeHttpCheck -Name 'Cuco' -Url $cucoUrl -Method 'GET' -TimeoutMs $httpTimeoutMs
         }
     }
-    catch {
-        & $writeWarn 'Ping' ($_.Exception.Message)
+
+    # Ping check (ICMP may be blocked; warn-only)
+    $checkPing = $true
+    try { $checkPing = [bool]$Config.PreflightPingEnabled } catch { $checkPing = $true }
+    if ($checkPing) {
+        $pingTarget = '1.1.1.1'
+        $pingTimeoutMs = 2000
+        $warnLatencyMs = 150
+        try { if ($Config.PreflightPingTarget) { $pingTarget = [string]$Config.PreflightPingTarget } } catch { $pingTarget = '1.1.1.1' }
+        try { if ($Config.PreflightPingTimeoutMs -and [int]$Config.PreflightPingTimeoutMs -gt 0) { $pingTimeoutMs = [int]$Config.PreflightPingTimeoutMs } } catch { $pingTimeoutMs = 2000 }
+        try { if ($Config.PreflightPingLatencyWarnMs -and [int]$Config.PreflightPingLatencyWarnMs -gt 0) { $warnLatencyMs = [int]$Config.PreflightPingLatencyWarnMs } } catch { $warnLatencyMs = 150 }
+
+        try {
+            $reply = $null
+            if ($Script:Test_InvokePreflightPing) {
+                $reply = & $Script:Test_InvokePreflightPing -Target $pingTarget -TimeoutMs $pingTimeoutMs
+            }
+            else {
+                $ping = New-Object System.Net.NetworkInformation.Ping
+                $reply = $ping.Send($pingTarget, $pingTimeoutMs)
+            }
+
+            if ($reply -and $reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+                $rt = 0
+                try { $rt = [int]$reply.RoundtripTime } catch { $rt = 0 }
+                if ($rt -ge $warnLatencyMs) {
+                    & $writeWarn 'Ping' ("{0} in {1}ms (>= {2}ms: potential slow connection)" -f $pingTarget, $rt, $warnLatencyMs)
+                }
+                else {
+                    & $writeOk 'Ping' ("{0} in {1}ms" -f $pingTarget, $rt)
+                }
+            }
+            else {
+                $status = if ($reply) { [string]$reply.Status } else { 'No reply' }
+                & $writeWarn 'Ping' $status
+            }
+        }
+        catch {
+            & $writeWarn 'Ping' ($_.Exception.Message)
+        }
     }
 }
 
