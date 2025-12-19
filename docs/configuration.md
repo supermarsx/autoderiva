@@ -48,11 +48,14 @@ Defaults shown below match `config.defaults.json`.
 | `LogRetentionDays` | integer | `10` | Delete log files older than this many days. Set to `0` to disable age-based cleanup. |
 | `MaxLogFiles` | integer | `15` | Keep at most this many log files (newest kept). Set to `0` to disable count-based cleanup. |
 | `DownloadAllFiles` | boolean | `false` | If `true`, downloads *all* files from the manifest (offline caching scenario). |
-| `CucoDownloadUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Primary URL to download the Cuco binary from. If this fails, AutoDeriva falls back to `BaseUrl + CucoBinaryPath`. |
-| `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Fallback relative path (from `BaseUrl`) to the Cuco utility binary, used when `CucoDownloadUrl` is unavailable. |
+| `CucoPrimaryUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Primary URL to download the Cuco binary from. |
+| `CucoSecondaryUrl` | string/null | `null` | Secondary URL for Cuco. When `null`, AutoDeriva uses `BaseUrl + CucoBinaryPath` as the secondary source. |
+| `CucoDownloadUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Legacy alias for `CucoPrimaryUrl` (kept for backward compatibility). |
+| `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Relative path (from `BaseUrl`) used to derive the default secondary URL when `CucoSecondaryUrl` is `null`. |
 | `DownloadCuco` | boolean | `true` | If `true`, Cuco is downloaded to the target directory. |
 | `CucoTargetDir` | string | `Desktop` | Where to place Cuco (supports `Desktop`). |
 | `AskBeforeDownloadCuco` | boolean | `false` | If `true`, asks for confirmation before downloading Cuco. |
+| `CucoExistingFilePolicy` | string | `Skip` | What to do if `CtoolGui.exe` already exists in `CucoTargetDir`: `Skip` (default) or `Overwrite`. |
 | `MaxRetries` | integer | `5` | Number of retries for transient download failures. |
 | `MaxBackoffSeconds` | integer | `60` | Maximum retry backoff (seconds). |
 | `MinDiskSpaceMB` | integer | `3072` | Minimum free disk space required (MB) for temporary downloads. |
@@ -84,6 +87,7 @@ These keys control the "Preflight Checks" section shown at startup.
 | `PreflightCheckAdmin` | boolean | `true` | If `true`, prints whether the script is running elevated. |
 | `PreflightCheckLogWritable` | boolean | `true` | If `true`, attempts a best-effort write to the current log file (when logging is enabled). |
 | `PreflightCheckNetwork` | boolean | `true` | If `true`, runs network/DNS/HTTP checks (skipped automatically in `AUTODERIVA_TEST=1`). |
+| `PreflightInternetFailurePolicy` | string | `Exit` | What to do if the Internet (DNS) check fails: `Exit` (default) or `Warn`. |
 | `PreflightHttpTimeoutMs` | integer | `4000` | Timeout in milliseconds for each HTTP preflight check. |
 | `PreflightCheckGitHub` | boolean | `true` | If `true`, checks connectivity to `https://github.com/`. |
 | `PreflightCheckBaseUrl` | boolean | `true` | If `true`, checks connectivity to the configured `BaseUrl` (HEAD with GET fallback). |

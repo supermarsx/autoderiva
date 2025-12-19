@@ -113,11 +113,14 @@ For the full key reference (types, defaults, and notes), see `docs/configuration
 | `LogRetentionDays` | integer | `10` | Delete log files older than this many days. Set to `0` to disable age-based cleanup. |
 | `MaxLogFiles` | integer | `15` | Keep at most this many log files (newest kept). Set to `0` to disable count-based cleanup. |
 | `DownloadAllFiles` | boolean | `false` | If `true`, downloads *all* files from the manifest (useful for offline scenarios). |
-| `CucoDownloadUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Primary URL to download the Cuco binary from. If this fails, AutoDeriva falls back to `BaseUrl + CucoBinaryPath`. |
-| `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Fallback relative path (from `BaseUrl`) to the Cuco utility binary, used when `CucoDownloadUrl` is unavailable. |
+| `CucoPrimaryUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Primary URL to download the Cuco binary from. |
+| `CucoSecondaryUrl` | string/null | `null` | Secondary URL for Cuco. When `null`, AutoDeriva uses `BaseUrl + CucoBinaryPath` as the secondary source. |
+| `CucoDownloadUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Legacy alias for `CucoPrimaryUrl` (backward compatibility). |
+| `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Relative path (from `BaseUrl`) used to derive the default secondary URL when `CucoSecondaryUrl` is `null`. |
 | `DownloadCuco` | boolean | `true` | If `true`, the Cuco utility is downloaded to the target directory. |
 | `CucoTargetDir` | string | `Desktop` | Where to place the Cuco binary. `Desktop` resolves to the original user's Desktop folder when possible. |
 | `AskBeforeDownloadCuco` | boolean | `false` | When `true`, asks for confirmation before downloading Cuco. Default is `false` (no prompt). |
+| `CucoExistingFilePolicy` | string | `Skip` | What to do if `CtoolGui.exe` already exists in `CucoTargetDir`: `Skip` (default) or `Overwrite`. |
 | `MaxRetries` | integer | `5` | Number of retries the downloader will attempt on transient failures. |
 | `MaxBackoffSeconds` | integer | `60` | Maximum backoff time (in seconds) between retry attempts. |
 | `MinDiskSpaceMB` | integer | `3072` | Minimum free disk space required (in MB) for temporary downloads. Checked before the main download phase (unless disabled). |

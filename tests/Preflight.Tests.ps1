@@ -52,4 +52,19 @@ Describe 'Preflight checks behavior' {
         ($calls | Where-Object { $_.Name -eq 'GitHub' -and $_.Url -eq 'https://github.com/' -and $_.Method -eq 'GET' }).Count | Should -Be 1
         ($calls | Where-Object { $_.Name -eq 'GitHub (BaseUrl)' -and $_.Method -eq 'HEAD' -and $_.AllowGetFallback -eq $true }).Count | Should -Be 1
     }
+
+    It 'Exits when Internet (DNS) check fails and policy is Exit' {
+        $Script:Test_PreflightAllowInTest = $true
+        $Script:Test_InvokePreflightDnsCheck = { param($HostName) return $false }
+        $Script:Test_InvokePreflightHttpCheck = { param($Name, $Url, $Method, $TimeoutMs, $AllowGetFallback) }
+        $Script:Test_InvokePreflightPing = { param($Target, $TimeoutMs) return [PSCustomObject]@{ Status = [System.Net.NetworkInformation.IPStatus]::Success; RoundtripTime = 10 } }
+
+        $Config.PreflightEnabled = $true
+        $Config.PreflightCheckNetwork = $true
+        $Config.PreflightInternetFailurePolicy = 'Exit'
+
+        { Test-PreFlight } | Should -Throw
+
+        $Script:Test_InvokePreflightDnsCheck = $null
+    }
 }

@@ -511,11 +511,16 @@ $DefaultConfig = @{
     LogRetentionDays                  = 10
     MaxLogFiles                       = 15
     DownloadAllFiles                  = $false
+    # Cuco download sources
+    # CucoDownloadUrl is kept for backward compatibility; prefer CucoPrimaryUrl/CucoSecondaryUrl.
     CucoDownloadUrl                   = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    CucoPrimaryUrl                    = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    CucoSecondaryUrl                  = $null
     CucoBinaryPath                    = "cuco/CtoolGui.exe"
     DownloadCuco                      = $true
     CucoTargetDir                     = "Desktop"
     AskBeforeDownloadCuco             = $false
+    CucoExistingFilePolicy            = 'Skip'
     MaxRetries                        = 5
     MaxBackoffSeconds                 = 60
     MinDiskSpaceMB                    = 3072
@@ -544,6 +549,7 @@ $DefaultConfig = @{
     PreflightCheckAdmin               = $true
     PreflightCheckLogWritable         = $true
     PreflightCheckNetwork             = $true
+    PreflightInternetFailurePolicy     = 'Exit'
     PreflightHttpTimeoutMs            = 4000
     PreflightCheckGitHub              = $true
     PreflightCheckBaseUrl             = $true
@@ -1924,7 +1930,7 @@ function Test-PreFlight {
         & $writeWarn 'Disk Space' 'Could not verify'
     }
 
-    # Network checks: keep fast; never fatal. Skipped in AUTODERIVA_TEST to avoid noisy/flaky CI.
+    # Network checks: keep fast. Skipped in AUTODERIVA_TEST to avoid noisy/flaky CI.
     $checkNetwork = $true
     try { $checkNetwork = [bool]$Config.PreflightCheckNetwork } catch { $checkNetwork = $true }
     if (-not $checkNetwork) {
@@ -2023,13 +2029,33 @@ function Test-PreFlight {
         }
     }
 
-    # Internet (DNS)
+    # Internet (DNS) - may be configured to Exit on failure
+    $internetFailurePolicy = 'Exit'
+    try { if ($Config.PreflightInternetFailurePolicy) { $internetFailurePolicy = [string]$Config.PreflightInternetFailurePolicy } } catch { $internetFailurePolicy = 'Exit' }
+
+    $dnsOk = $false
     try {
-        [void][System.Net.Dns]::GetHostEntry('github.com')
-        & $writeOk 'Internet (DNS)' 'Resolved github.com'
+        if ($Script:Test_InvokePreflightDnsCheck) {
+            $dnsOk = [bool](& $Script:Test_InvokePreflightDnsCheck -HostName 'github.com')
+        }
+        else {
+            [void][System.Net.Dns]::GetHostEntry('github.com')
+            $dnsOk = $true
+        }
     }
     catch {
+        $dnsOk = $false
+        Write-Verbose "Preflight DNS check failed: $_"
+    }
+
+    if ($dnsOk) {
+        & $writeOk 'Internet (DNS)' 'Resolved github.com'
+    }
+    else {
         & $writeWarn 'Internet (DNS)' 'DNS resolution failed'
+        if ($internetFailurePolicy -eq 'Exit') {
+            throw 'Preflight internet check failed (DNS resolution).'
+        }
     }
 
     # GitHub (web) + GitHub content base (raw)
@@ -2823,15 +2849,40 @@ function Install-Cuco {
     }
 
     $CucoDest = Join-Path $TargetDir "CtoolGui.exe"
-    $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
-    try {
-        if ($Config.CucoDownloadUrl) { $primaryUrl = [string]$Config.CucoDownloadUrl }
+
+    # Existing file policy: Skip (default) or Overwrite
+    $existingPolicy = 'Skip'
+    try { if ($Config.CucoExistingFilePolicy) { $existingPolicy = [string]$Config.CucoExistingFilePolicy } } catch { $existingPolicy = 'Skip' }
+    if (Test-Path -LiteralPath $CucoDest) {
+        if ($existingPolicy -eq 'Skip') {
+            Write-AutoDerivaLog 'INFO' "Cuco already exists at target path. Skipping download: $CucoDest" 'Gray'
+            $Script:Stats.CucoSkipped++
+            return
+        }
+
+        try { Remove-Item -LiteralPath $CucoDest -Force -ErrorAction SilentlyContinue }
+        catch {
+            Write-AutoDerivaLog 'WARN' "Could not remove existing Cuco file. Skipping download: $CucoDest" 'Yellow'
+            $Script:Stats.CucoSkipped++
+            return
+        }
     }
-    catch {
+
+    # Resolve primary/secondary sources
+    $primaryUrl = $null
+    $secondaryUrl = $null
+    try { if ($Config.CucoPrimaryUrl) { $primaryUrl = [string]$Config.CucoPrimaryUrl } } catch { $primaryUrl = $null }
+    if ([string]::IsNullOrWhiteSpace($primaryUrl)) {
+        try { if ($Config.CucoDownloadUrl) { $primaryUrl = [string]$Config.CucoDownloadUrl } } catch { $primaryUrl = $null }
+    }
+    if ([string]::IsNullOrWhiteSpace($primaryUrl)) {
         $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
     }
 
-    $fallbackUrl = $Config.BaseUrl + $Config.CucoBinaryPath
+    try { if ($Config.CucoSecondaryUrl) { $secondaryUrl = [string]$Config.CucoSecondaryUrl } } catch { $secondaryUrl = $null }
+    if ([string]::IsNullOrWhiteSpace($secondaryUrl)) {
+        $secondaryUrl = $Config.BaseUrl + $Config.CucoBinaryPath
+    }
 
     Write-AutoDerivaLog "INFO" "Downloading Cuco utility to: $TargetDir" "Cyan"
 
@@ -2856,10 +2907,10 @@ function Install-Cuco {
             Write-Verbose "Failed to remove partial Cuco download before fallback: $_"
         }
 
-        Write-AutoDerivaLog 'WARN' 'Primary Cuco source unavailable. Falling back to repo copy.' 'Yellow'
-        Write-AutoDerivaLog 'INFO' "Trying Cuco fallback URL: $fallbackUrl" 'Gray'
+        Write-AutoDerivaLog 'WARN' 'Primary Cuco source unavailable. Falling back to secondary source.' 'Yellow'
+        Write-AutoDerivaLog 'INFO' "Trying Cuco secondary source: $secondaryUrl" 'Gray'
         try {
-            $okFallback = Invoke-DownloadFile -Url $fallbackUrl -OutputPath $CucoDest
+            $okFallback = Invoke-DownloadFile -Url $secondaryUrl -OutputPath $CucoDest
             if ($okFallback -and (Test-Path $CucoDest)) {
                 $downloaded = $true
             }
