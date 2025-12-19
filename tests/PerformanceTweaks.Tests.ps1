@@ -66,4 +66,22 @@ Describe 'Performance tweaks (registry) behavior' {
 
         $calls.Count | Should -Be 0
     }
+
+    It 'Does not throw when a registry write is unauthorized' {
+        $Script:Test_SetRegistryDword = {
+            param($Path, $Name, $Value)
+            if ([string]$Path -like 'HKLM:*') {
+                throw ([System.UnauthorizedAccessException]::new('Access is denied'))
+            }
+        }
+        $Script:Test_RemoveRegistryValue = { param($Path, $Name) }
+
+        $Script:DryRun = $false
+        $Config.DisableOneDriveStartup = $false
+        $Config.HideTaskViewButton = $false
+        $Config.DisableNewsAndInterestsAndWidgets = $true
+        $Config.HideTaskbarSearch = $false
+
+        { Invoke-PerformanceTuning } | Should -Not -Throw
+    }
 }

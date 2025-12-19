@@ -34,7 +34,6 @@
     "AutoExitWithoutConfirmation": false,
     "ShowOnlyNonZeroStats": true,
     "ShowBanner": true,
-
     "DisableOneDriveStartup": true,
     "HideTaskViewButton": true,
     "DisableNewsAndInterestsAndWidgets": true,

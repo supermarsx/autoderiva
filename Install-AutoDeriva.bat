@@ -96,6 +96,14 @@ if defined AUTODERIVA_BAT_NOEXIT (
   "%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS1%" %*
 )
 set "RC=%ERRORLEVEL%"
+
+REM If the script fails, keep the window open so errors are visible.
+REM This is especially helpful when launched via Explorer or cmd.exe /c.
+if not "%RC%"=="0" (
+  if not defined AUTODERIVA_BAT_NO_PAUSE (
+    if /I not "%CI%"=="1" set "AUTODERIVA_BAT_PAUSE=1"
+  )
+)
 if defined AUTODERIVA_BAT_KEEP_TEMP (
   echo.
   echo NOTE: Keeping temp installer script for troubleshooting:

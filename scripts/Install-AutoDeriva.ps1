@@ -284,16 +284,45 @@ function Set-AutoDerivaRegistryDword {
     }
 
     if ($Script:Test_SetRegistryDword) {
-        & $Script:Test_SetRegistryDword -Path $Path -Name $Name -Value $Value
+        try {
+            & $Script:Test_SetRegistryDword -Path $Path -Name $Name -Value $Value
+        }
+        catch [System.UnauthorizedAccessException] {
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+        }
+        catch [System.Security.SecurityException] {
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+        }
         return
     }
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        try { New-Item -Path $Path -Force | Out-Null }
-        catch { Write-Verbose "Failed to create registry key ${Path}: $_" }
+        try {
+            New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
+        }
+        catch [System.UnauthorizedAccessException] {
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to create registry key $Path. Skipping $Name=$Value. Error: $($_.Exception.Message)" 'Yellow'
+            return
+        }
+        catch [System.Security.SecurityException] {
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to create registry key $Path. Skipping $Name=$Value. Error: $($_.Exception.Message)" 'Yellow'
+            return
+        }
+        catch {
+            Write-Verbose "Failed to create registry key ${Path}: $_"
+            return
+        }
     }
 
-    Set-ItemProperty -Path $Path -Name $Name -Type DWord -Value $Value -Force | Out-Null
+    try {
+        Set-ItemProperty -Path $Path -Name $Name -Type DWord -Value $Value -Force -ErrorAction Stop | Out-Null
+    }
+    catch [System.UnauthorizedAccessException] {
+        Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+    }
+    catch [System.Security.SecurityException] {
+        Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+    }
 }
 
 function Remove-AutoDerivaRegistryValue {
@@ -2829,7 +2858,14 @@ function Main {
         $autoExit = $false
         try { $autoExit = [bool]$Config.AutoExitWithoutConfirmation } catch { $autoExit = $false }
         $forceWait = ($env:AUTODERIVA_NOEXIT -eq '1')
-        if ($forceWait -and $Script:HadFatalError) { $autoExit = $false }
+        if ($Script:HadFatalError) {
+            # If we hit a fatal error in an interactive ConsoleHost, keep the window open
+            # so the user can read the error, even if AutoExitWithoutConfirmation is set.
+            if (Test-AutoDerivaPromptAvailable) {
+                $autoExit = $false
+                $forceWait = $true
+            }
+        }
         Wait-AutoDerivaExit -AutoExit:$autoExit -Force:($forceWait -and $Script:HadFatalError)
     }
 }
