@@ -549,7 +549,7 @@ $DefaultConfig = @{
     PreflightCheckAdmin               = $true
     PreflightCheckLogWritable         = $true
     PreflightCheckNetwork             = $true
-    PreflightInternetFailurePolicy     = 'Exit'
+    PreflightInternetFailurePolicy    = 'Exit'
     PreflightHttpTimeoutMs            = 4000
     PreflightCheckGitHub              = $true
     PreflightCheckBaseUrl             = $true
@@ -2779,6 +2779,74 @@ function Install-Driver {
 
 # .SYNOPSIS
 #     Downloads the Cuco binary to the configured directory.
+function Get-AutoDerivaCucoSourceType {
+    [CmdletBinding()]
+    param(
+        [Parameter()][string]$Url
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Url)) { return 'None' }
+
+    # Consider both raw content and repo pages as "GitHub repo" sources.
+    if ($Url -match '^https?://(raw\.githubusercontent\.com|github\.com)/') { return 'GitHubRepo' }
+    if ($Url -match '^https?://raw\.github\.com/') { return 'GitHubRepo' }
+
+    return 'CustomUrl'
+}
+
+function Get-AutoDerivaCucoSourceInfo {
+    [CmdletBinding()]
+    param()
+
+    $normalize = {
+        param($Value)
+        if ($null -eq $Value) { return $null }
+        $s = $null
+        try { $s = [string]$Value } catch { $s = $null }
+        if ([string]::IsNullOrWhiteSpace($s)) { return $null }
+        $t = $s.Trim()
+        if ($t.ToLowerInvariant() -in @('none', 'disabled', 'off')) { return $null }
+        return $t
+    }
+
+    # Primary: CucoPrimaryUrl -> legacy CucoDownloadUrl -> default cuco site
+    $primaryUrl = $null
+    try { $primaryUrl = & $normalize -Value $Config.CucoPrimaryUrl } catch { $primaryUrl = $null }
+    if (-not $primaryUrl) {
+        try { $primaryUrl = & $normalize -Value $Config.CucoDownloadUrl } catch { $primaryUrl = $null }
+    }
+    if (-not $primaryUrl) {
+        $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    }
+
+    # Secondary: allow explicit disable by setting CucoSecondaryUrl to "none"/"disabled"/"off".
+    $secondaryUrl = $null
+    $secondaryDisabled = $false
+    try {
+        if ($Config.CucoSecondaryUrl -is [string]) {
+            $sv = $Config.CucoSecondaryUrl.Trim()
+            if ($sv.ToLowerInvariant() -in @('none', 'disabled', 'off')) { $secondaryDisabled = $true }
+        }
+    }
+    catch {
+        $secondaryDisabled = $false
+    }
+
+    if (-not $secondaryDisabled) {
+        try { $secondaryUrl = & $normalize -Value $Config.CucoSecondaryUrl } catch { $secondaryUrl = $null }
+        if (-not $secondaryUrl) {
+            $secondaryUrl = $Config.BaseUrl + $Config.CucoBinaryPath
+        }
+    }
+
+    return [PSCustomObject]@{
+        PrimaryUrl     = [string]$primaryUrl
+        PrimaryKind    = (Get-AutoDerivaCucoSourceType -Url $primaryUrl)
+        SecondaryUrl   = if ($secondaryUrl) { [string]$secondaryUrl } else { $null }
+        SecondaryKind  = (Get-AutoDerivaCucoSourceType -Url $secondaryUrl)
+    }
+}
+
 function Install-Cuco {
     if (-not $Config.DownloadCuco) {
         Write-AutoDerivaLog "INFO" "Cuco download is disabled in configuration." "Gray"
@@ -2868,21 +2936,11 @@ function Install-Cuco {
         }
     }
 
-    # Resolve primary/secondary sources
-    $primaryUrl = $null
-    $secondaryUrl = $null
-    try { if ($Config.CucoPrimaryUrl) { $primaryUrl = [string]$Config.CucoPrimaryUrl } } catch { $primaryUrl = $null }
-    if ([string]::IsNullOrWhiteSpace($primaryUrl)) {
-        try { if ($Config.CucoDownloadUrl) { $primaryUrl = [string]$Config.CucoDownloadUrl } } catch { $primaryUrl = $null }
-    }
-    if ([string]::IsNullOrWhiteSpace($primaryUrl)) {
-        $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
-    }
+    $sourceInfo = Get-AutoDerivaCucoSourceInfo
+    $primaryUrl = [string]$sourceInfo.PrimaryUrl
+    $secondaryUrl = $sourceInfo.SecondaryUrl
 
-    try { if ($Config.CucoSecondaryUrl) { $secondaryUrl = [string]$Config.CucoSecondaryUrl } } catch { $secondaryUrl = $null }
-    if ([string]::IsNullOrWhiteSpace($secondaryUrl)) {
-        $secondaryUrl = $Config.BaseUrl + $Config.CucoBinaryPath
-    }
+    Write-AutoDerivaLog 'INFO' ("Cuco sources: Primary={0}, Secondary={1}" -f $sourceInfo.PrimaryKind, $sourceInfo.SecondaryKind) 'Gray'
 
     Write-AutoDerivaLog "INFO" "Downloading Cuco utility to: $TargetDir" "Cyan"
 
@@ -2907,16 +2965,18 @@ function Install-Cuco {
             Write-Verbose "Failed to remove partial Cuco download before fallback: $_"
         }
 
-        Write-AutoDerivaLog 'WARN' 'Primary Cuco source unavailable. Falling back to secondary source.' 'Yellow'
-        Write-AutoDerivaLog 'INFO' "Trying Cuco secondary source: $secondaryUrl" 'Gray'
-        try {
-            $okFallback = Invoke-DownloadFile -Url $secondaryUrl -OutputPath $CucoDest
-            if ($okFallback -and (Test-Path $CucoDest)) {
-                $downloaded = $true
+        if (-not [string]::IsNullOrWhiteSpace($secondaryUrl)) {
+            Write-AutoDerivaLog 'WARN' 'Primary Cuco source unavailable. Falling back to secondary source.' 'Yellow'
+            Write-AutoDerivaLog 'INFO' "Trying Cuco secondary source: $secondaryUrl" 'Gray'
+            try {
+                $okFallback = Invoke-DownloadFile -Url $secondaryUrl -OutputPath $CucoDest
+                if ($okFallback -and (Test-Path $CucoDest)) {
+                    $downloaded = $true
+                }
             }
-        }
-        catch {
-            Write-Verbose "Fallback Cuco download failed: $_"
+            catch {
+                Write-Verbose "Fallback Cuco download failed: $_"
+            }
         }
     }
 

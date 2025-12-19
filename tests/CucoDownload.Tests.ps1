@@ -59,6 +59,21 @@ Describe 'Cuco download behavior' {
         (Test-Path -LiteralPath $outFile) | Should -BeTrue
     }
 
+    It 'Classifies primary/secondary Cuco sources as CustomUrl/GitHubRepo/None' {
+        $Config.BaseUrl = 'https://raw.githubusercontent.com/supermarsx/autoderiva/main/'
+        $Config.CucoBinaryPath = 'cuco/CtoolGui.exe'
+        $Config.CucoPrimaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+        $Config.CucoSecondaryUrl = $null
+
+        $info = Get-AutoDerivaCucoSourceInfo
+        $info.PrimaryKind | Should -Be 'CustomUrl'
+        $info.SecondaryKind | Should -Be 'GitHubRepo'
+
+        $Config.CucoSecondaryUrl = 'none'
+        $info2 = Get-AutoDerivaCucoSourceInfo
+        $info2.SecondaryKind | Should -Be 'None'
+    }
+
     It 'Skips download when Cuco already exists and policy is Skip' {
         $calls = New-Object System.Collections.Generic.List[string]
 
