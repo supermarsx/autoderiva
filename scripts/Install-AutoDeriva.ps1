@@ -1834,7 +1834,7 @@ function Test-PreFlight {
                 }
             }
             finally {
-                try { $resp.Close() } catch { Write-Verbose "Failed to close HTTP response for $Name: $_" }
+                try { $resp.Close() } catch { Write-Verbose "Failed to close HTTP response for ${Name}: $_" }
             }
         }
         catch {
