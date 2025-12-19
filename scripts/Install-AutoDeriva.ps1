@@ -2313,12 +2313,34 @@ function Get-MissingDriverDevice {
     $devices = @($SystemDevices | Where-Object { $_ -and ($_.PSObject.Properties.Name -contains 'InstanceId') -and $_.InstanceId })
     if ($devices.Count -eq 0) { return @() }
 
+    # Prefer CIM for detecting missing-driver devices. This is generally available on
+    # Windows PowerShell 5.1+ and avoids slow per-device Get-PnpDeviceProperty calls.
+    try {
+        $cimMissing = @(Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode=28' -ErrorAction Stop)
+        $cimMissing = @($cimMissing | Where-Object { $_ })
+
+        # Convert CIM results to InstanceIds and intersect with the provided Get-PnpDevice list.
+        # PNPDeviceID matches InstanceId for PnP devices.
+        $missingIds = @($cimMissing | ForEach-Object { $_.PNPDeviceID } | Where-Object { $_ })
+        if ($missingIds.Count -eq 0) { return @() }
+
+        $missing = @()
+        foreach ($dev in $devices) {
+            if ($missingIds -contains $dev.InstanceId) { $missing += $dev }
+        }
+        return $missing
+    }
+    catch {
+        Write-Verbose "CIM missing-driver filter unavailable; falling back to per-device ProblemCode scan. Error: $_"
+    }
+
     $showScanProgress = $true
     if ($env:AUTODERIVA_TEST -eq '1') { $showScanProgress = $false }
     if ($env:CI -eq '1' -or $env:GITHUB_ACTIONS -eq 'true') { $showScanProgress = $false }
 
     # Parallelize the per-device ProblemCode query (Get-PnpDeviceProperty) via runspaces.
-    # This can be a noticeable speedup on systems with lots of devices.
+    # This can be a noticeable speedup on systems with lots of devices, but is still slower
+    # than the CIM filter above.
     $mode = 'Parallel'
     try {
         if ($Config.DeviceScanMode) { $mode = [string]$Config.DeviceScanMode }
@@ -2344,33 +2366,6 @@ function Get-MissingDriverDevice {
     if ($showScanProgress) {
         $modeText = if ($maxConcurrency -le 1) { 'Single' } else { "Parallel ($maxConcurrency)" }
         Write-AutoDerivaLog 'INFO' "Checking driver status (ProblemCode) for $totalDevices device(s) [$modeText]..." 'Gray'
-    }
-
-    # Fast path: if Get-PnpDevice supports -Problem, use it to filter ProblemCode 28 in one call.
-    # This avoids per-device Get-PnpDeviceProperty queries (which are slow and CPU-heavy).
-    try {
-        $cmd = Get-Command Get-PnpDevice -ErrorAction Stop
-        if ($cmd -and $cmd.Parameters -and $cmd.Parameters.ContainsKey('Problem')) {
-            $missingFast = $null
-            try {
-                $missingFast = Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop
-            }
-            catch {
-                Write-Verbose "Fast missing-driver filter (Get-PnpDevice -Problem 28) failed; falling back. Error: $_"
-                $missingFast = $null
-            }
-
-            if ($null -ne $missingFast) {
-                $mf = @($missingFast | Where-Object { $_ })
-                if ($showScanProgress) {
-                    Write-AutoDerivaLog 'INFO' "Fast filter used. Devices with ProblemCode 28: $($mf.Count)" 'Gray'
-                }
-                return $mf
-            }
-        }
-    }
-    catch {
-        Write-Verbose "Unable to evaluate fast missing-driver filter support; falling back. Error: $_"
     }
 
     if ($maxConcurrency -le 1) {
@@ -2474,32 +2469,33 @@ function Get-MissingDriverDevicesDirect {
     #
     # .DESCRIPTION
     #     Tries, in order:
-    #     1) Get-PnpDevice -PresentOnly -Problem 28 (single call, when supported)
-    #     2) CIM: Win32_PnPEntity filtered by ConfigManagerErrorCode=28
+    #     1) CIM: Win32_PnPEntity filtered by ConfigManagerErrorCode (preferred; broad support)
+    #     2) Get-PnpDevice -PresentOnly -Problem <code> (single call, when supported)
     #
     #     Returns $null if no fast method is available.
     [CmdletBinding()]
     param()
 
-    # Fastest path: single Get-PnpDevice call when -Problem is supported.
+    # Preferred: CIM filter. This avoids per-device DEVPKEY queries.
+    # Get-CimInstance returns $null on 0 results, so we normalize to @().
+    try {
+        $m = @(Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode=28' -ErrorAction Stop)
+        return @($m | Where-Object { $_ })
+    }
+    catch {
+        Write-Verbose "Direct missing-device query via Win32_PnPEntity unavailable: $_"
+    }
+
+    # Fallback: single Get-PnpDevice call when -Problem is supported.
     try {
         $cmd = Get-Command Get-PnpDevice -ErrorAction Stop
         if ($cmd -and $cmd.Parameters -and $cmd.Parameters.ContainsKey('Problem')) {
-            $m = Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop
-            return @($m)
+            $m = @(Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop)
+            return @($m | Where-Object { $_ })
         }
     }
     catch {
         Write-Verbose "Direct missing-device query via Get-PnpDevice -Problem unavailable: $_"
-    }
-
-    # Fallback: CIM filter. This avoids per-device DEVPKEY queries.
-    try {
-        $m = Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode=28' -ErrorAction Stop
-        return @($m)
-    }
-    catch {
-        Write-Verbose "Direct missing-device query via Win32_PnPEntity unavailable: $_"
     }
 
     return $null
