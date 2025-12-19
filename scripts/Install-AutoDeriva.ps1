@@ -268,6 +268,87 @@ function Write-AutoDerivaBanner {
     }
 }
 
+function Get-AutoDerivaInteractiveUserSid {
+    [CmdletBinding()]
+    param()
+
+    if ($Script:Test_GetInteractiveUserSid) {
+        return & $Script:Test_GetInteractiveUserSid
+    }
+
+    try {
+        $explorerProc = Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($explorerProc -and $explorerProc.UserName) {
+            $acct = New-Object System.Security.Principal.NTAccount($explorerProc.UserName)
+            $sid = $acct.Translate([System.Security.Principal.SecurityIdentifier])
+            if ($sid -and $sid.Value) { return [string]$sid.Value }
+        }
+    }
+    catch {
+        Write-Verbose "Failed to resolve interactive user SID via explorer.exe owner: $_"
+    }
+
+    try {
+        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        if ($cs -and $cs.UserName) {
+            $acct = New-Object System.Security.Principal.NTAccount([string]$cs.UserName)
+            $sid = $acct.Translate([System.Security.Principal.SecurityIdentifier])
+            if ($sid -and $sid.Value) { return [string]$sid.Value }
+        }
+    }
+    catch {
+        Write-Verbose "Failed to resolve interactive user SID via Win32_ComputerSystem: $_"
+    }
+
+    return $null
+}
+
+function Convert-AutoDerivaRegistryPathToInteractiveUser {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    if (-not $Path.StartsWith('HKCU:\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $Path
+    }
+
+    if ($env:AUTODERIVA_TEST -eq '1') {
+        return $Path
+    }
+
+    $isAdmin = $false
+    try {
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')
+    }
+    catch {
+        $isAdmin = $false
+    }
+    if (-not $isAdmin) {
+        return $Path
+    }
+
+    $currentSid = $null
+    try { $currentSid = [string]([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) } catch { $currentSid = $null }
+
+    $interactiveSid = Get-AutoDerivaInteractiveUserSid
+    if ([string]::IsNullOrWhiteSpace($interactiveSid)) {
+        return $Path
+    }
+
+    if ($currentSid -and ($interactiveSid -eq $currentSid)) {
+        return $Path
+    }
+
+    if (-not $Script:HkcuRedirectLogged) {
+        $Script:HkcuRedirectLogged = $true
+        Write-AutoDerivaLog 'INFO' ("Applying HKCU tweaks to interactive user hive (SID: {0})" -f $interactiveSid) 'Gray'
+    }
+
+    $subKey = $Path.Substring(6) # after 'HKCU:\'
+    return ("Registry::HKEY_USERS\\{0}\\{1}" -f $interactiveSid, $subKey)
+}
+
 function Set-AutoDerivaRegistryDword {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
@@ -276,52 +357,54 @@ function Set-AutoDerivaRegistryDword {
         [Parameter(Mandatory = $true)][int]$Value
     )
 
-    if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$Path\\$Name", "Set DWORD to $Value"))) { return }
+    $effectivePath = Convert-AutoDerivaRegistryPathToInteractiveUser -Path $Path
+
+    if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$effectivePath\\$Name", "Set DWORD to $Value"))) { return }
 
     if ($Script:DryRun) {
-        Write-AutoDerivaLog 'INFO' "DryRun: Would set registry DWORD $Path\\$Name=$Value" 'Gray'
+        Write-AutoDerivaLog 'INFO' "DryRun: Would set registry DWORD $effectivePath\\$Name=$Value" 'Gray'
         return
     }
 
     if ($Script:Test_SetRegistryDword) {
         try {
-            & $Script:Test_SetRegistryDword -Path $Path -Name $Name -Value $Value
+            & $Script:Test_SetRegistryDword -Path $effectivePath -Name $Name -Value $Value
         }
         catch [System.UnauthorizedAccessException] {
-            Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $effectivePath\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
         }
         catch [System.Security.SecurityException] {
-            Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $effectivePath\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
         }
         return
     }
 
-    if (-not (Test-Path -LiteralPath $Path)) {
+    if (-not (Test-Path -LiteralPath $effectivePath)) {
         try {
-            New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
+            New-Item -Path $effectivePath -Force -ErrorAction Stop | Out-Null
         }
         catch [System.UnauthorizedAccessException] {
-            Write-AutoDerivaLog 'WARN' "Insufficient permissions to create registry key $Path. Skipping $Name=$Value. Error: $($_.Exception.Message)" 'Yellow'
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to create registry key $effectivePath. Skipping $Name=$Value. Error: $($_.Exception.Message)" 'Yellow'
             return
         }
         catch [System.Security.SecurityException] {
-            Write-AutoDerivaLog 'WARN' "Insufficient permissions to create registry key $Path. Skipping $Name=$Value. Error: $($_.Exception.Message)" 'Yellow'
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to create registry key $effectivePath. Skipping $Name=$Value. Error: $($_.Exception.Message)" 'Yellow'
             return
         }
         catch {
-            Write-Verbose "Failed to create registry key ${Path}: $_"
+            Write-Verbose "Failed to create registry key ${effectivePath}: $_"
             return
         }
     }
 
     try {
-        Set-ItemProperty -Path $Path -Name $Name -Type DWord -Value $Value -Force -ErrorAction Stop | Out-Null
+        Set-ItemProperty -Path $effectivePath -Name $Name -Type DWord -Value $Value -Force -ErrorAction Stop | Out-Null
     }
     catch [System.UnauthorizedAccessException] {
-        Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+        Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $effectivePath\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
     }
     catch [System.Security.SecurityException] {
-        Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+        Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $effectivePath\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
     }
 }
 
@@ -332,23 +415,25 @@ function Remove-AutoDerivaRegistryValue {
         [Parameter(Mandatory = $true)][string]$Name
     )
 
-    if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$Path\\$Name", 'Remove registry value'))) { return }
+    $effectivePath = Convert-AutoDerivaRegistryPathToInteractiveUser -Path $Path
+
+    if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$effectivePath\\$Name", 'Remove registry value'))) { return }
 
     if ($Script:DryRun) {
-        Write-AutoDerivaLog 'INFO' "DryRun: Would remove registry value $Path\\$Name" 'Gray'
+        Write-AutoDerivaLog 'INFO' "DryRun: Would remove registry value $effectivePath\\$Name" 'Gray'
         return
     }
 
     if ($Script:Test_RemoveRegistryValue) {
-        & $Script:Test_RemoveRegistryValue -Path $Path -Name $Name
+        & $Script:Test_RemoveRegistryValue -Path $effectivePath -Name $Name
         return
     }
 
     try {
-        Remove-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $effectivePath -Name $Name -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Verbose "Failed to remove registry value ${Path}\\${Name}: $_"
+        Write-Verbose "Failed to remove registry value ${effectivePath}\\${Name}: $_"
     }
 }
 
