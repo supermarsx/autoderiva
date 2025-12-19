@@ -47,7 +47,7 @@
     "PreflightInternetFailurePolicy": "Exit",
     "PreflightHttpTimeoutMs": 4000,
     "PreflightCheckGitHub": true,
-    "PreflightCheckBaseUrl": true,
+    "PreflightCheckBaseUrl": false,
     "PreflightCheckGoogle": true,
     "PreflightCheckCucoSite": true,
     "PreflightCucoUrl": "https://cuco.inforlandia.pt/",

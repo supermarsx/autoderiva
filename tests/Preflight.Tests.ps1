@@ -31,7 +31,7 @@ Describe 'Preflight checks behavior' {
         ($calls | Where-Object { $_.Name -eq 'Cuco' -and $_.Url -eq 'https://cuco.inforlandia.pt/' -and $_.Method -eq 'GET' }).Count | Should -Be 1
     }
 
-    It 'Uses GET for GitHub and allows BaseUrl GET fallback' {
+    It 'Uses GET for GitHub and allows repo content GET fallback' {
         $calls = New-Object System.Collections.Generic.List[object]
 
         $Script:Test_PreflightAllowInTest = $true
@@ -50,7 +50,7 @@ Describe 'Preflight checks behavior' {
         Test-PreFlight
 
         ($calls | Where-Object { $_.Name -eq 'GitHub' -and $_.Url -eq 'https://github.com/' -and $_.Method -eq 'GET' }).Count | Should -Be 1
-        ($calls | Where-Object { $_.Name -eq 'GitHub (BaseUrl)' -and $_.Method -eq 'HEAD' -and $_.AllowGetFallback -eq $true }).Count | Should -Be 1
+        ($calls | Where-Object { $_.Name -eq 'Repo content (Inventory)' -and $_.Url -eq 'https://raw.githubusercontent.com/supermarsx/autoderiva/main/exports/driver_inventory.csv' -and $_.Method -eq 'HEAD' -and $_.AllowGetFallback -eq $true }).Count | Should -Be 1
     }
 
     It 'Exits when Internet (DNS) check fails and policy is Exit' {

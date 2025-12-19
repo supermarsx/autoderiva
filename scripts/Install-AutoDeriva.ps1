@@ -358,6 +358,7 @@ function Set-AutoDerivaRegistryDword {
     )
 
     $effectivePath = Convert-AutoDerivaRegistryPathToInteractiveUser -Path $Path
+    $didRedirect = ($effectivePath -ne $Path)
 
     if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$effectivePath\\$Name", "Set DWORD to $Value"))) { return }
 
@@ -398,13 +399,65 @@ function Set-AutoDerivaRegistryDword {
     }
 
     try {
-        Set-ItemProperty -Path $effectivePath -Name $Name -Type DWord -Value $Value -Force -ErrorAction Stop | Out-Null
+        # New-ItemProperty reliably sets the desired registry value type.
+        New-ItemProperty -Path $effectivePath -Name $Name -PropertyType DWord -Value $Value -Force -ErrorAction Stop | Out-Null
     }
     catch [System.UnauthorizedAccessException] {
+        if ($didRedirect) {
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to set redirected HKCU DWORD $effectivePath\\$Name=$Value. Falling back to current HKCU. Error: $($_.Exception.Message)" 'Yellow'
+            try {
+                if (-not (Test-Path -LiteralPath $Path)) {
+                    New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
+                }
+                New-ItemProperty -Path $Path -Name $Name -PropertyType DWord -Value $Value -Force -ErrorAction Stop | Out-Null
+                Write-AutoDerivaLog 'INFO' "Applied registry DWORD fallback to current user hive: $Path\\$Name=$Value" 'Gray'
+                return
+            }
+            catch {
+                Write-AutoDerivaLog 'WARN' "Fallback registry write failed for $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+                return
+            }
+        }
+
         Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $effectivePath\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
     }
     catch [System.Security.SecurityException] {
+        if ($didRedirect) {
+            Write-AutoDerivaLog 'WARN' "Security exception setting redirected HKCU DWORD $effectivePath\\$Name=$Value. Falling back to current HKCU. Error: $($_.Exception.Message)" 'Yellow'
+            try {
+                if (-not (Test-Path -LiteralPath $Path)) {
+                    New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
+                }
+                New-ItemProperty -Path $Path -Name $Name -PropertyType DWord -Value $Value -Force -ErrorAction Stop | Out-Null
+                Write-AutoDerivaLog 'INFO' "Applied registry DWORD fallback to current user hive: $Path\\$Name=$Value" 'Gray'
+                return
+            }
+            catch {
+                Write-AutoDerivaLog 'WARN' "Fallback registry write failed for $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+                return
+            }
+        }
+
         Write-AutoDerivaLog 'WARN' "Insufficient permissions to set registry DWORD $effectivePath\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+    }
+    catch {
+        if ($didRedirect) {
+            Write-AutoDerivaLog 'WARN' "Registry write failed for redirected HKCU path $effectivePath\\$Name=$Value. Falling back to current HKCU. Error: $($_.Exception.Message)" 'Yellow'
+            try {
+                if (-not (Test-Path -LiteralPath $Path)) {
+                    New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
+                }
+                New-ItemProperty -Path $Path -Name $Name -PropertyType DWord -Value $Value -Force -ErrorAction Stop | Out-Null
+                Write-AutoDerivaLog 'INFO' "Applied registry DWORD fallback to current user hive: $Path\\$Name=$Value" 'Gray'
+                return
+            }
+            catch {
+                Write-AutoDerivaLog 'WARN' "Fallback registry write failed for $Path\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
+                return
+            }
+        }
+
+        Write-AutoDerivaLog 'WARN' "Registry write failed for $effectivePath\\$Name=$Value. Skipping. Error: $($_.Exception.Message)" 'Yellow'
     }
 }
 
@@ -416,6 +469,7 @@ function Remove-AutoDerivaRegistryValue {
     )
 
     $effectivePath = Convert-AutoDerivaRegistryPathToInteractiveUser -Path $Path
+    $didRedirect = ($effectivePath -ne $Path)
 
     if ($PSCmdlet -and (-not $PSCmdlet.ShouldProcess("$effectivePath\\$Name", 'Remove registry value'))) { return }
 
@@ -431,6 +485,22 @@ function Remove-AutoDerivaRegistryValue {
 
     try {
         Remove-ItemProperty -Path $effectivePath -Name $Name -ErrorAction SilentlyContinue
+    }
+    catch [System.UnauthorizedAccessException] {
+        if ($didRedirect) {
+            Write-AutoDerivaLog 'WARN' "Insufficient permissions to remove redirected HKCU value $effectivePath\\$Name. Falling back to current HKCU. Error: $($_.Exception.Message)" 'Yellow'
+            try { Remove-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue } catch { Write-Verbose "Fallback remove failed: $_" }
+            return
+        }
+        Write-Verbose "Failed to remove registry value ${effectivePath}\\${Name}: $_"
+    }
+    catch [System.Security.SecurityException] {
+        if ($didRedirect) {
+            Write-AutoDerivaLog 'WARN' "Security exception removing redirected HKCU value $effectivePath\\$Name. Falling back to current HKCU. Error: $($_.Exception.Message)" 'Yellow'
+            try { Remove-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue } catch { Write-Verbose "Fallback remove failed: $_" }
+            return
+        }
+        Write-Verbose "Failed to remove registry value ${effectivePath}\\${Name}: $_"
     }
     catch {
         Write-Verbose "Failed to remove registry value ${effectivePath}\\${Name}: $_"
@@ -554,7 +624,7 @@ $DefaultConfig = @{
     PreflightInternetFailurePolicy    = 'Exit'
     PreflightHttpTimeoutMs            = 4000
     PreflightCheckGitHub              = $true
-    PreflightCheckBaseUrl             = $true
+    PreflightCheckBaseUrl             = $false
     PreflightCheckGoogle              = $true
     PreflightCheckCucoSite            = $true
     PreflightCucoUrl                  = 'https://cuco.inforlandia.pt/'
@@ -2104,12 +2174,26 @@ function Test-PreFlight {
         & $invokeHttpCheck -Name 'GitHub' -Url 'https://github.com/' -Method 'GET' -TimeoutMs $httpTimeoutMs
     }
     try {
-        $baseUrl = $null
-        try { $baseUrl = [string]$Config.BaseUrl } catch { $baseUrl = $null }
         $checkBaseUrl = $true
         try { $checkBaseUrl = [bool]$Config.PreflightCheckBaseUrl } catch { $checkBaseUrl = $true }
-        if ($checkBaseUrl -and -not [string]::IsNullOrWhiteSpace($baseUrl) -and ($baseUrl -match '^https?://')) {
-            & $invokeHttpCheck -Name 'GitHub (BaseUrl)' -Url $baseUrl -Method 'HEAD' -TimeoutMs $httpTimeoutMs -AllowGetFallback
+        if ($checkBaseUrl) {
+            # "BaseUrl" itself may be a directory-like endpoint (e.g., .../main/) which can return 400 on HEAD.
+            # When enabled, validate by checking a known content URL under BaseUrl.
+            $inventoryUrl = $null
+            try {
+                $baseUrl = $null
+                try { $baseUrl = [string]$Config.BaseUrl } catch { $baseUrl = $null }
+                $invPath = $null
+                try { $invPath = [string]$Config.InventoryPath } catch { $invPath = $null }
+                if (-not [string]::IsNullOrWhiteSpace($baseUrl) -and ($baseUrl -match '^https?://') -and -not [string]::IsNullOrWhiteSpace($invPath)) {
+                    $inventoryUrl = $baseUrl + $invPath
+                }
+            }
+            catch { $inventoryUrl = $null }
+
+            if (-not [string]::IsNullOrWhiteSpace($inventoryUrl)) {
+                & $invokeHttpCheck -Name 'Repo content (Inventory)' -Url $inventoryUrl -Method 'HEAD' -TimeoutMs $httpTimeoutMs -AllowGetFallback
+            }
         }
     }
     catch {
@@ -2384,6 +2468,43 @@ function Get-MissingDriverDevice {
     return $missing
 }
 
+function Get-MissingDriverDevicesDirect {
+    # .SYNOPSIS
+    #     Retrieves present devices missing drivers (ProblemCode 28) using the fastest available method.
+    #
+    # .DESCRIPTION
+    #     Tries, in order:
+    #     1) Get-PnpDevice -PresentOnly -Problem 28 (single call, when supported)
+    #     2) CIM: Win32_PnPEntity filtered by ConfigManagerErrorCode=28
+    #
+    #     Returns $null if no fast method is available.
+    [CmdletBinding()]
+    param()
+
+    # Fastest path: single Get-PnpDevice call when -Problem is supported.
+    try {
+        $cmd = Get-Command Get-PnpDevice -ErrorAction Stop
+        if ($cmd -and $cmd.Parameters -and $cmd.Parameters.ContainsKey('Problem')) {
+            $m = Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop
+            return @($m)
+        }
+    }
+    catch {
+        Write-Verbose "Direct missing-device query via Get-PnpDevice -Problem unavailable: $_"
+    }
+
+    # Fallback: CIM filter. This avoids per-device DEVPKEY queries.
+    try {
+        $m = Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode=28' -ErrorAction Stop
+        return @($m)
+    }
+    catch {
+        Write-Verbose "Direct missing-device query via Win32_PnPEntity unavailable: $_"
+    }
+
+    return $null
+}
+
 function Get-SystemHardware {
     # .SYNOPSIS
     #     Retrieves the Hardware IDs of the current system.
@@ -2406,28 +2527,54 @@ function Get-SystemHardware {
         return $ids
     }
 
-    try {
-        $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
-        if (-not $SystemDevices) { throw "Get-PnpDevice returned no results." }
-    }
-    catch {
-        throw "Failed to query system devices: $_"
-    }
-
     $effectiveOnlyMissing = $false
     if (-not $AllDevices) {
         try { $effectiveOnlyMissing = [bool]$Config.ScanOnlyMissingDrivers } catch { $effectiveOnlyMissing = $false }
     }
 
+    $SystemDevices = $null
     if ($effectiveOnlyMissing) {
-        $missingDevices = Get-MissingDriverDevice -SystemDevices $SystemDevices
-        Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28)." "Gray"
-        $SystemDevices = $missingDevices
+        # Avoid expensive per-device ProblemCode scanning when possible.
+        $directMissing = $null
+        try { $directMissing = Get-MissingDriverDevicesDirect } catch { $directMissing = $null }
+        if ($null -ne $directMissing) {
+            $SystemDevices = $directMissing
+            Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28) via direct query." "Gray"
+        }
+        else {
+            # Fallback: query all devices then compute missing-driver subset.
+            try {
+                $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
+                if (-not $SystemDevices) { throw "Get-PnpDevice returned no results." }
+            }
+            catch {
+                throw "Failed to query system devices: $_"
+            }
+
+            $missingDevices = Get-MissingDriverDevice -SystemDevices $SystemDevices
+            Write-AutoDerivaLog "INFO" "Filtering to devices missing drivers (ProblemCode 28)." "Gray"
+            $SystemDevices = $missingDevices
+        }
+    }
+    else {
+        try {
+            $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
+            if (-not $SystemDevices) { throw "Get-PnpDevice returned no results." }
+        }
+        catch {
+            throw "Failed to query system devices: $_"
+        }
     }
 
+    # NOTE: when ScanOnlyMissingDrivers=true, this is the set of HWIDs for devices missing drivers.
     $SystemHardwareIds = $SystemDevices.HardwareID | Where-Object { $_ } | ForEach-Object { $_.ToUpper() }
     $Script:Stats.DriversScanned = $SystemHardwareIds.Count
-    Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
+    if ($effectiveOnlyMissing) {
+        Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) hardware ID(s) for missing-driver devices." "Green"
+    }
+    else {
+        Write-AutoDerivaLog "INFO" "Found $( $SystemHardwareIds.Count ) active hardware IDs." "Green"
+    }
     return $SystemHardwareIds
 }
 
@@ -2499,20 +2646,35 @@ function Export-AutoDerivaUnknownDevicesCsv {
     try { Import-Module PnpDevice -ErrorAction SilentlyContinue | Out-Null }
     catch { Write-Verbose "Failed to import PnpDevice module: $_" }
 
-    $systemDevices = $null
+    $missing = $null
     try {
-        $systemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
+        $directMissing = $null
+        try { $directMissing = Get-MissingDriverDevicesDirect } catch { $directMissing = $null }
+        if ($null -ne $directMissing) {
+            $missing = @($directMissing)
+        }
+        else {
+            $systemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
+            if (-not $systemDevices) { $systemDevices = @() }
+            $missing = Get-MissingDriverDevice -SystemDevices $systemDevices
+        }
     }
     catch {
         throw "Failed to query PnP devices for export: $_"
     }
-
-    $missing = Get-MissingDriverDevice -SystemDevices $systemDevices
     $rows = @()
     foreach ($dev in @($missing)) {
         if (-not $dev) { continue }
         $instanceId = $null
-        try { $instanceId = [string]$dev.InstanceId } catch { $instanceId = $null }
+        try {
+            if ($dev.PSObject.Properties.Name -contains 'InstanceId') {
+                $instanceId = [string]$dev.InstanceId
+            }
+            elseif ($dev.PSObject.Properties.Name -contains 'PNPDeviceID') {
+                $instanceId = [string]$dev.PNPDeviceID
+            }
+        }
+        catch { $instanceId = $null }
         if (-not $instanceId) { continue }
 
         $hwids = @()

@@ -92,7 +92,7 @@ These keys control the "Preflight Checks & Initialization" section shown at star
 | `PreflightInternetFailurePolicy` | string | `Exit` | What to do if the Internet (DNS) check fails: `Exit` (default) or `Warn`. |
 | `PreflightHttpTimeoutMs` | integer | `4000` | Timeout in milliseconds for each HTTP preflight check. |
 | `PreflightCheckGitHub` | boolean | `true` | If `true`, checks connectivity to `https://github.com/`. |
-| `PreflightCheckBaseUrl` | boolean | `true` | If `true`, checks connectivity to the configured `BaseUrl` (HEAD with GET fallback). |
+| `PreflightCheckBaseUrl` | boolean | `false` | If `true`, validates repo content reachability using a known URL under `BaseUrl` (e.g., `BaseUrl + InventoryPath`). This avoids fragile checks against the `BaseUrl` root which can return 400. |
 | `PreflightCheckGoogle` | boolean | `true` | If `true`, checks connectivity to `https://www.google.com/generate_204`. |
 | `PreflightCheckCucoSite` | boolean | `true` | If `true`, checks reachability of the Cuco site URL below. |
 | `PreflightCucoUrl` | string | `https://cuco.inforlandia.pt/` | URL to check for Cuco reachability. |
