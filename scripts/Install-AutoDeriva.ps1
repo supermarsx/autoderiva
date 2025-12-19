@@ -872,6 +872,11 @@ $Script:Stats = @{
     UnknownDriversAfterInstall = 0
 }
 
+# Temp workspace / preflight state
+$Script:TempWorkspaceDir = $null
+$Script:PreflightDiskSpaceOk = $null
+$Script:PreflightWasRun = $false
+
 # Section timing tracking (elapsed time per section between Write-Section calls)
 $Script:SectionTimings = New-Object System.Collections.Generic.List[object]
 $Script:CurrentSectionTitle = $null
@@ -1812,6 +1817,32 @@ function Test-DiskSpace {
     }
 }
 
+function Initialize-TempWorkspace {
+    param(
+        [switch]$Create,
+        [switch]$NoLog
+    )
+
+    if (-not $Script:TempWorkspaceDir) {
+        $tempRoot = $env:TEMP
+        if (-not $tempRoot) {
+            try { $tempRoot = [System.IO.Path]::GetTempPath() } catch { $tempRoot = $null }
+        }
+        if (-not $tempRoot) { $tempRoot = '.' }
+        $Script:TempWorkspaceDir = Join-Path $tempRoot ("AutoDeriva_{0}" -f (Get-Random))
+    }
+
+    if (-not $NoLog) {
+        Write-AutoDerivaLog 'INFO' "Temporary workspace: $($Script:TempWorkspaceDir)" 'Gray'
+    }
+
+    if ($Create) {
+        New-Item -ItemType Directory -Path $Script:TempWorkspaceDir -Force | Out-Null
+    }
+
+    return $Script:TempWorkspaceDir
+}
+
 # .SYNOPSIS
 #     Fetches a CSV file from a remote URL and parses it.
 # .PARAMETER Url
@@ -1856,7 +1887,12 @@ function Test-PreFlight {
     try { $preflightEnabled = [bool]$Config.PreflightEnabled } catch { $preflightEnabled = $true }
     if (-not $preflightEnabled) { return }
 
-    Write-Section 'Preflight Checks'
+    Write-Section 'Preflight Checks & Initialization'
+    $Script:PreflightWasRun = $true
+
+    # Temp workspace: choose a stable path early so later phases reuse it.
+    # Do not create the directory here (some modes exit early before downloads).
+    $tempWorkspace = Initialize-TempWorkspace
 
     $httpTimeoutMs = 4000
     try {
@@ -1920,9 +1956,10 @@ function Test-PreFlight {
     # Disk space check (uses existing logic; non-fatal here)
     try {
         if ($Config.CheckDiskSpace) {
-            $pathToCheck = $env:TEMP
+            $pathToCheck = $tempWorkspace
+            if (-not $pathToCheck) { $pathToCheck = $env:TEMP }
             if (-not $pathToCheck) { $pathToCheck = '.' }
-            [void](Test-DiskSpace -Path $pathToCheck)
+            $Script:PreflightDiskSpaceOk = Test-DiskSpace -Path $pathToCheck
         }
         else {
             Write-AutoDerivaLog 'INFO' 'Disk Space: Skipped (disabled by config)' 'Gray'
@@ -2225,6 +2262,33 @@ function Get-MissingDriverDevice {
         Write-AutoDerivaLog 'INFO' "Checking driver status (ProblemCode) for $totalDevices device(s) [$modeText]..." 'Gray'
     }
 
+    # Fast path: if Get-PnpDevice supports -Problem, use it to filter ProblemCode 28 in one call.
+    # This avoids per-device Get-PnpDeviceProperty queries (which are slow and CPU-heavy).
+    try {
+        $cmd = Get-Command Get-PnpDevice -ErrorAction Stop
+        if ($cmd -and $cmd.Parameters -and $cmd.Parameters.ContainsKey('Problem')) {
+            $missingFast = $null
+            try {
+                $missingFast = Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop
+            }
+            catch {
+                Write-Verbose "Fast missing-driver filter (Get-PnpDevice -Problem 28) failed; falling back. Error: $_"
+                $missingFast = $null
+            }
+
+            if ($null -ne $missingFast) {
+                $mf = @($missingFast | Where-Object { $_ })
+                if ($showScanProgress) {
+                    Write-AutoDerivaLog 'INFO' "Fast filter used. Devices with ProblemCode 28: $($mf.Count)" 'Gray'
+                }
+                return $mf
+            }
+        }
+    }
+    catch {
+        Write-Verbose "Unable to evaluate fast missing-driver filter support; falling back. Error: $_"
+    }
+
     if ($maxConcurrency -le 1) {
         $results = @()
         $done = 0
@@ -2381,6 +2445,18 @@ function Get-UnknownDriverDeviceCount {
     try {
         if ($Script:Test_GetUnknownDriverCount) {
             return [int](& $Script:Test_GetUnknownDriverCount)
+        }
+
+        # Prefer a single fast query when supported.
+        try {
+            $cmd = Get-Command Get-PnpDevice -ErrorAction Stop
+            if ($cmd -and $cmd.Parameters -and $cmd.Parameters.ContainsKey('Problem')) {
+                $m = Get-PnpDevice -PresentOnly -Problem 28 -ErrorAction Stop
+                return [int](@($m).Count)
+            }
+        }
+        catch {
+            Write-Verbose "Fast unknown-driver count unavailable; falling back. Error: $_"
         }
 
         $SystemDevices = Get-PnpDevice -PresentOnly -ErrorAction Stop
@@ -2886,10 +2962,10 @@ function Get-AutoDerivaCucoSourceInfo {
     }
 
     return [PSCustomObject]@{
-        PrimaryUrl     = [string]$primaryUrl
-        PrimaryKind    = (Get-AutoDerivaCucoSourceType -Url $primaryUrl)
-        SecondaryUrl   = if ($secondaryUrl) { [string]$secondaryUrl } else { $null }
-        SecondaryKind  = (Get-AutoDerivaCucoSourceType -Url $secondaryUrl)
+        PrimaryUrl    = [string]$primaryUrl
+        PrimaryKind   = (Get-AutoDerivaCucoSourceType -Url $primaryUrl)
+        SecondaryUrl  = if ($secondaryUrl) { [string]$secondaryUrl } else { $null }
+        SecondaryKind = (Get-AutoDerivaCucoSourceType -Url $secondaryUrl)
     }
 }
 
@@ -3289,15 +3365,24 @@ function Main {
             return
         }
 
-        # Create Temp Directory
-        $TempDir = Join-Path $env:TEMP "AutoDeriva_$(Get-Random)"
-        New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
-        Write-AutoDerivaLog "INFO" "Temporary workspace: $TempDir" "Gray"
+        # Ensure temp workspace exists for downloads / extraction.
+        if (-not $Script:PreflightWasRun) {
+            Write-Section 'Initialization'
+        }
+        $TempDir = Initialize-TempWorkspace -Create -NoLog:($Script:PreflightWasRun)
 
-        # Check Disk Space
-        if ($Config.CheckDiskSpace -and -not (Test-DiskSpace -Path $TempDir)) {
-            Write-AutoDerivaLog "FATAL" "Not enough disk space to proceed." "Red"
-            return
+        # Check Disk Space (fatal here)
+        if ($Config.CheckDiskSpace) {
+            if ($Script:PreflightDiskSpaceOk -eq $false) {
+                Write-AutoDerivaLog 'FATAL' 'Not enough disk space to proceed.' 'Red'
+                return
+            }
+            elseif ($null -eq $Script:PreflightDiskSpaceOk) {
+                if (-not (Test-DiskSpace -Path $TempDir)) {
+                    Write-AutoDerivaLog 'FATAL' 'Not enough disk space to proceed.' 'Red'
+                    return
+                }
+            }
         }
 
         # Download All Files if configured
