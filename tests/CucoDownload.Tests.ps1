@@ -74,6 +74,22 @@ Describe 'Cuco download behavior' {
         $info2.SecondaryKind | Should -Be 'None'
     }
 
+    It 'Allows configuring source kinds (GitHubRepo/None) directly' {
+        $Config.BaseUrl = 'https://raw.githubusercontent.com/supermarsx/autoderiva/main/'
+        $Config.CucoBinaryPath = 'cuco/CtoolGui.exe'
+
+        $Config.CucoPrimarySourceKind = 'GitHubRepo'
+        $Config.CucoPrimaryUrl = 'https://example.com/ignored.exe'
+
+        $Config.CucoSecondarySourceKind = 'None'
+        $Config.CucoSecondaryUrl = 'https://example.com/ignored2.exe'
+
+        $info = Get-AutoDerivaCucoSourceInfo
+        $info.PrimaryKind | Should -Be 'GitHubRepo'
+        $info.PrimaryUrl | Should -Be 'https://raw.githubusercontent.com/supermarsx/autoderiva/main/cuco/CtoolGui.exe'
+        $info.SecondaryKind | Should -Be 'None'
+    }
+
     It 'Skips download when Cuco already exists and policy is Skip' {
         $calls = New-Object System.Collections.Generic.List[string]
 

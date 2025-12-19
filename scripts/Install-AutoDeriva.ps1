@@ -514,7 +514,9 @@ $DefaultConfig = @{
     # Cuco download sources
     # CucoDownloadUrl is kept for backward compatibility; prefer CucoPrimaryUrl/CucoSecondaryUrl.
     CucoDownloadUrl                   = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    CucoPrimarySourceKind             = 'CustomUrl'
     CucoPrimaryUrl                    = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    CucoSecondarySourceKind           = 'GitHubRepo'
     CucoSecondaryUrl                  = $null
     CucoBinaryPath                    = "cuco/CtoolGui.exe"
     DownloadCuco                      = $true
@@ -2809,34 +2811,78 @@ function Get-AutoDerivaCucoSourceInfo {
         return $t
     }
 
-    # Primary: CucoPrimaryUrl -> legacy CucoDownloadUrl -> default cuco site
-    $primaryUrl = $null
-    try { $primaryUrl = & $normalize -Value $Config.CucoPrimaryUrl } catch { $primaryUrl = $null }
-    if (-not $primaryUrl) {
-        try { $primaryUrl = & $normalize -Value $Config.CucoDownloadUrl } catch { $primaryUrl = $null }
-    }
-    if (-not $primaryUrl) {
-        $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe'
+    $readKind = {
+        param($Value)
+        if ($null -eq $Value) { return $null }
+        $s = $null
+        try { $s = [string]$Value } catch { $s = $null }
+        if ([string]::IsNullOrWhiteSpace($s)) { return $null }
+        return $s.Trim()
     }
 
-    # Secondary: allow explicit disable by setting CucoSecondaryUrl to "none"/"disabled"/"off".
-    $secondaryUrl = $null
+    # Primary kind: CustomUrl (default), GitHubRepo, None
+    $primaryKindCfg = $null
+    try { $primaryKindCfg = (& $readKind -Value $Config.CucoPrimarySourceKind) } catch { $primaryKindCfg = $null }
+    if ($primaryKindCfg) {
+        $primaryKindCfg = $primaryKindCfg.Trim()
+        switch -Regex ($primaryKindCfg) {
+            '^customurl$' { $primaryKindCfg = 'CustomUrl' }
+            '^githubrepo$' { $primaryKindCfg = 'GitHubRepo' }
+            '^none$' { $primaryKindCfg = 'None' }
+            default { $primaryKindCfg = $null }
+        }
+    }
+
+    $primaryUrl = $null
+    if ($primaryKindCfg -eq 'None') {
+        $primaryUrl = $null
+    }
+    elseif ($primaryKindCfg -eq 'GitHubRepo') {
+        $primaryUrl = ($Config.BaseUrl + $Config.CucoBinaryPath)
+    }
+    else {
+        # CustomUrl or unspecified: CucoPrimaryUrl -> legacy CucoDownloadUrl -> default cuco site
+        try { $primaryUrl = & $normalize -Value $Config.CucoPrimaryUrl } catch { $primaryUrl = $null }
+        if (-not $primaryUrl) {
+            try { $primaryUrl = & $normalize -Value $Config.CucoDownloadUrl } catch { $primaryUrl = $null }
+        }
+        if (-not $primaryUrl) { $primaryUrl = 'https://cuco.inforlandia.pt/uagent/CtoolGui.exe' }
+    }
+
+    # Secondary kind: GitHubRepo (default), CustomUrl, None
+    $secondaryKindCfg = $null
+    try { $secondaryKindCfg = (& $readKind -Value $Config.CucoSecondarySourceKind) } catch { $secondaryKindCfg = $null }
+    if ($secondaryKindCfg) {
+        $secondaryKindCfg = $secondaryKindCfg.Trim()
+        switch -Regex ($secondaryKindCfg) {
+            '^customurl$' { $secondaryKindCfg = 'CustomUrl' }
+            '^githubrepo$' { $secondaryKindCfg = 'GitHubRepo' }
+            '^none$' { $secondaryKindCfg = 'None' }
+            default { $secondaryKindCfg = $null }
+        }
+    }
+
+    # Back-compat explicit disable by URL string
     $secondaryDisabled = $false
     try {
         if ($Config.CucoSecondaryUrl -is [string]) {
-            $sv = $Config.CucoSecondaryUrl.Trim()
-            if ($sv.ToLowerInvariant() -in @('none', 'disabled', 'off')) { $secondaryDisabled = $true }
+            $sv = $Config.CucoSecondaryUrl.Trim().ToLowerInvariant()
+            if ($sv -in @('none', 'disabled', 'off')) { $secondaryDisabled = $true }
         }
     }
-    catch {
-        $secondaryDisabled = $false
-    }
+    catch { $secondaryDisabled = $false }
 
-    if (-not $secondaryDisabled) {
+    $secondaryUrl = $null
+    if ($secondaryKindCfg -eq 'None' -or $secondaryDisabled) {
+        $secondaryUrl = $null
+    }
+    elseif ($secondaryKindCfg -eq 'CustomUrl') {
         try { $secondaryUrl = & $normalize -Value $Config.CucoSecondaryUrl } catch { $secondaryUrl = $null }
-        if (-not $secondaryUrl) {
-            $secondaryUrl = $Config.BaseUrl + $Config.CucoBinaryPath
-        }
+    }
+    else {
+        # GitHubRepo or unspecified: explicit URL -> derived
+        try { $secondaryUrl = & $normalize -Value $Config.CucoSecondaryUrl } catch { $secondaryUrl = $null }
+        if (-not $secondaryUrl) { $secondaryUrl = ($Config.BaseUrl + $Config.CucoBinaryPath) }
     }
 
     return [PSCustomObject]@{

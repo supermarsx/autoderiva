@@ -48,7 +48,9 @@ Defaults shown below match `config.defaults.json`.
 | `LogRetentionDays` | integer | `10` | Delete log files older than this many days. Set to `0` to disable age-based cleanup. |
 | `MaxLogFiles` | integer | `15` | Keep at most this many log files (newest kept). Set to `0` to disable count-based cleanup. |
 | `DownloadAllFiles` | boolean | `false` | If `true`, downloads *all* files from the manifest (offline caching scenario). |
+| `CucoPrimarySourceKind` | string | `CustomUrl` | How to interpret the primary Cuco source: `CustomUrl`, `GitHubRepo`, or `None`. If `GitHubRepo`, AutoDeriva uses `BaseUrl + CucoBinaryPath` as the primary URL. If `None`, primary is skipped. |
 | `CucoPrimaryUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Primary URL to download the Cuco binary from. |
+| `CucoSecondarySourceKind` | string | `GitHubRepo` | How to interpret the secondary Cuco source: `CustomUrl`, `GitHubRepo`, or `None`. If `None`, no fallback download is attempted. |
 | `CucoSecondaryUrl` | string/null | `null` | Secondary URL for Cuco. When `null`, AutoDeriva uses `BaseUrl + CucoBinaryPath` as the secondary source. |
 | `CucoDownloadUrl` | string | `https://cuco.inforlandia.pt/uagent/CtoolGui.exe` | Legacy alias for `CucoPrimaryUrl` (kept for backward compatibility). |
 | `CucoBinaryPath` | string | `cuco/CtoolGui.exe` | Relative path (from `BaseUrl`) used to derive the default secondary URL when `CucoSecondaryUrl` is `null`. |
