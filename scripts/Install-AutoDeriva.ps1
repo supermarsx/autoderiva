@@ -2703,7 +2703,7 @@ function Install-Driver {
         foreach ($inf in $assocParts) {
             $k = $inf.ToLowerInvariant()
             if (-not $ManifestByInf.ContainsKey($k)) {
-                $ManifestByInf[$k] = New-Object System.Collections.Generic.List[object]
+                $ManifestByInf[$k] = [System.Collections.Generic.List[object]]::new()
             }
             $ManifestByInf[$k].Add($row)
         }
@@ -2753,10 +2753,10 @@ function Install-Driver {
         $DriverFiles = $null
         $k = $TargetInf.ToLowerInvariant()
         if ($ManifestByInf.ContainsKey($k)) {
-            $DriverFiles = @($ManifestByInf[$k])
+            $DriverFiles = $ManifestByInf[$k]
         }
         
-        if (-not $DriverFiles) {
+        if (-not $DriverFiles -or $DriverFiles.Count -eq 0) {
             Write-AutoDerivaLog "WARN" "No files found in manifest for $infPath" "Yellow"
             $Script:Stats.DriversSkipped++
             $Results += [PSCustomObject]@{ Driver = $infPath; Status = "Skipped (No Files)"; Details = "Manifest missing files" }
