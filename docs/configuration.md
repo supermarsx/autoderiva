@@ -28,7 +28,7 @@ This file lives at the repo root and should contain only the keys you want to ov
 {
     "MaxConcurrentDownloads": 4,
     "SingleDownloadMode": false,
-    "ScanOnlyMissingDrivers": true
+    "ScanOnlyProblemDevices": true
 }
 ```
 
@@ -69,8 +69,8 @@ Defaults shown below match `config.defaults.json`.
 | `HashMismatchPolicy` | string | `Continue` | What to do when a file hash mismatches (when `VerifyFileHashes` is enabled): `Continue` (default; install anyway), `SkipDriver` (skip installing affected drivers), or `Abort` (stop driver installation phase). |
 | `HashVerifyMode` | string | `Parallel` | Hash verification mode when `VerifyFileHashes` is enabled: `Parallel` or `Single`. |
 | `HashVerifyMaxConcurrency` | integer | `5` | Max number of files to hash in parallel when `HashVerifyMode` is `Parallel`. |
-| `ScanOnlyMissingDrivers` | boolean | `true` | When `true`, scans only devices missing drivers (PnP ProblemCode `28`). |
-| `ScanOnlyProblemDevices` | boolean | `false` | When `true`, scans only devices whose ProblemCode is in `ProblemDeviceCodes` (overrides `ScanOnlyMissingDrivers`). |
+| `ScanOnlyMissingDrivers` | boolean | `false` | When `true`, scans only devices missing drivers (PnP ProblemCode `28`). |
+| `ScanOnlyProblemDevices` | boolean | `true` | When `true`, scans only devices whose ProblemCode is in `ProblemDeviceCodes` (overrides `ScanOnlyMissingDrivers`). |
 | `ProblemDeviceCodes` | integer[] | `[1, 10, 14, 18, 28, 31, 32, 33, 35, 37, 39, 43, 48]` | Problem codes considered “problem devices” when `ScanOnlyProblemDevices` is enabled. |
 | `DeviceScanMode` | string | `Parallel` | Device scan mode for ProblemCode queries: `Parallel` (runspaces) or `Single` (serial). |
 | `DeviceScanMaxConcurrency` | integer | `8` | Max parallel workers for device scan (ProblemCode queries). Set to `1` to force single-threaded scan. |

@@ -42,7 +42,8 @@ function Invoke-DownloadFile {
         if ($PSVersionTable.PSEdition -ne 'Core') {
             [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         }
-    } catch {
+    }
+    catch {
         Write-Verbose ("TLS configuration not supported/failed: " + $_.Exception.Message)
     }
 

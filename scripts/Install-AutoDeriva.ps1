@@ -607,7 +607,9 @@ $DefaultConfig = @{
     HashVerifyMode                    = 'Parallel'
     HashVerifyMaxConcurrency          = 5
     # New defaults
-    ScanOnlyMissingDrivers            = $true
+    ScanOnlyMissingDrivers            = $false
+    ScanOnlyProblemDevices            = $true
+    ProblemDeviceCodes                = @(1, 10, 14, 18, 28, 31, 32, 33, 35, 37, 39, 43, 48)
     DeviceScanMode                    = 'Parallel'
     DeviceScanMaxConcurrency          = 8
     ClearWifiProfiles                 = $true

@@ -63,7 +63,7 @@ if defined AUTODERIVA_BAT_DEBUG (
   "%PS_EXE%" -NoProfile -Command "$PSVersionTable.PSVersion.ToString(); $PSVersionTable.PSEdition" 2>nul
 )
 
-"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; $out=$env:TMP_PS1; if (-not $out) { throw 'TMP_PS1 not set' }; if ($p -and (Test-Path -LiteralPath $p)) { Copy-Item -LiteralPath $p -Destination $out -Force } else { Invoke-WebRequest -Uri $u -OutFile $out -UseBasicParsing -ErrorAction Stop } } catch { Write-Error $_; exit 1 }"
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "try { $ProgressPreference='SilentlyContinue'; $u='%SCRIPT_URL%'; $p=$env:AUTODERIVA_SCRIPT_PATH; $out=$env:TMP_PS1; if (-not $out) { throw 'TMP_PS1 not set' }; if ($p -and (Test-Path -LiteralPath $p)) { Copy-Item -LiteralPath $p -Destination $out -Force } else { $iwr=Get-Command Invoke-WebRequest -ErrorAction Stop; $iwrParams=@{ Uri=$u; OutFile=$out; ErrorAction='Stop' }; if($iwr.Parameters.ContainsKey('UseBasicParsing')){ $iwrParams.UseBasicParsing=$true }; Invoke-WebRequest @iwrParams } } catch { Write-Error $_; exit 1 }"
 if not %ERRORLEVEL%==0 (
   echo ERROR: Failed to download/copy installer script.
   echo - SCRIPT_URL=%SCRIPT_URL%
