@@ -2689,6 +2689,25 @@ function Install-Driver {
     Write-Section "File Manifest & Download"
     $ManifestUrl = $Config.BaseUrl + $Config.ManifestPath
     $FileManifest = Get-RemoteCsv -Url $ManifestUrl
+
+    # Build a lookup from INF -> manifest rows.
+    # NOTE: AssociatedInf may be a semicolon-separated list for multi-INF packages.
+    $ManifestByInf = @{}
+    foreach ($row in $FileManifest) {
+        if (-not $row) { continue }
+        if (-not ($row.PSObject.Properties.Name -contains 'AssociatedInf')) { continue }
+        $assocRaw = [string]$row.AssociatedInf
+        if ([string]::IsNullOrWhiteSpace($assocRaw)) { continue }
+
+        $assocParts = $assocRaw -split ';' | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ }
+        foreach ($inf in $assocParts) {
+            $k = $inf.ToLowerInvariant()
+            if (-not $ManifestByInf.ContainsKey($k)) {
+                $ManifestByInf[$k] = New-Object System.Collections.Generic.List[object]
+            }
+            $ManifestByInf[$k].Add($row)
+        }
+    }
     
     # Group matches by INF path to avoid duplicate downloads. Be defensive in case
     # the inventory CSV is missing the expected `InfPath` property on some rows.
@@ -2705,8 +2724,14 @@ function Install-Driver {
             # Try to resolve the INF path using the file manifest (best-effort)
             $match = $FileManifest | Where-Object { $_.FileName -eq $drv.FileName } | Select-Object -First 1
             if ($match) {
-                # Prefer an AssociatedInf mapping if available, otherwise use the relative path of the INF itself
-                if ($match.AssociatedInf) { $infCandidate = $match.AssociatedInf } else { $infCandidate = $match.RelativePath }
+                # Prefer the relative path of the INF itself (when present). AssociatedInf may represent a multi-INF package.
+                if ($match.RelativePath -and ([string]$match.RelativePath -match '\.inf$')) {
+                    $infCandidate = $match.RelativePath
+                }
+                elseif ($match.AssociatedInf) {
+                    $first = (($match.AssociatedInf -split ';') | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ } | Select-Object -First 1)
+                    if ($first) { $infCandidate = $first }
+                }
             }
         }
         if ($infCandidate) { $UniqueInfs += $infCandidate } else {
@@ -2725,7 +2750,11 @@ function Install-Driver {
 
     foreach ($infPath in $UniqueInfs) {
         $TargetInf = $infPath.Replace('\', '/')
-        $DriverFiles = $FileManifest | Where-Object { $_.AssociatedInf -eq $TargetInf }
+        $DriverFiles = $null
+        $k = $TargetInf.ToLowerInvariant()
+        if ($ManifestByInf.ContainsKey($k)) {
+            $DriverFiles = @($ManifestByInf[$k])
+        }
         
         if (-not $DriverFiles) {
             Write-AutoDerivaLog "WARN" "No files found in manifest for $infPath" "Yellow"

@@ -81,7 +81,7 @@ Defaults shown below match `config.defaults.json`.
 
 ## Preflight checks
 
-These keys control the "Preflight Checks" section shown at startup.
+These keys control the "Preflight Checks & Initialization" section shown at startup.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -100,6 +100,20 @@ These keys control the "Preflight Checks" section shown at startup.
 | `PreflightPingTarget` | string | `1.1.1.1` | Target hostname/IP for the ping check. |
 | `PreflightPingTimeoutMs` | integer | `2000` | Ping timeout (milliseconds). |
 | `PreflightPingLatencyWarnMs` | integer | `150` | Ping latency threshold (ms) that triggers a warning about potential slow connection. |
+
+## Driver packages (inventory + manifest)
+
+AutoDeriva installs drivers using two exported CSVs:
+
+- `exports/driver_inventory.csv`: one row per `.inf` file with metadata and `HardwareIDs`.
+- `exports/driver_file_manifest.csv`: one row per file under `drivers/` with `Sha256` and `AssociatedInf`.
+
+The `AssociatedInf` column in the manifest represents the *driver package association* for each file:
+
+- Most of the time it's a **single** repo-relative `.inf` path.
+- For multi-INF packages (folders containing multiple `.inf` files), it can be a **semicolon-separated list** of `.inf` paths.
+
+AutoDeriva treats a file as belonging to a driver being installed when that driver's INF appears in the `AssociatedInf` list.
 
 ## Wi-Fi profile cleanup
 

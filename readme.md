@@ -251,6 +251,44 @@ The repository hosts a wide range of drivers, including but not limited to:
     *   It uses \PnPUtil\ to install the drivers into the Windows Driver Store.
 6.  **Cleanup**: Temporary files are removed after installation.
 
+## 📦 Driver packages model
+
+AutoDeriva treats the repository's `drivers/` content as a set of *driver packages*.
+
+- A **driver package** is the folder tree rooted under `drivers/` that contains one or more `.inf` files plus any required companion files (`.cat`, `.sys`, `.dll`, etc.).
+- The installer does **not** try to infer a package by folder naming; it uses two exported CSVs:
+    - `exports/driver_inventory.csv` (per-INF metadata + Hardware IDs)
+    - `exports/driver_file_manifest.csv` (per-file SHA256 + association to package)
+
+### Inventory (`exports/driver_inventory.csv`)
+
+- One row per `.inf` file.
+- Key columns:
+    - `InfPath`: relative path to the INF within the repo (Windows-style path in the CSV).
+    - `HardwareIDs`: semicolon-separated list of HWIDs extracted from the INF.
+
+### File manifest (`exports/driver_file_manifest.csv`)
+
+- One row per file under `drivers/`.
+- Key columns:
+    - `RelativePath`: repo-relative file path using forward slashes.
+    - `Sha256`: SHA256 of that file.
+    - `AssociatedInf`: repo-relative INF path(s) using forward slashes.
+
+`AssociatedInf` can be either:
+
+- A **single** INF path (most packages), or
+- A **semicolon-separated list** of INF paths for **multi-INF packages** (common for chipset / serial IO style bundles).
+
+During install, AutoDeriva stages (downloads) all files whose `AssociatedInf` list contains the target INF being installed.
+
+### Regenerating inventory + manifest
+
+When driver content changes, regenerate both exports from the repo root:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\dev-scripts\Generate-Manifests.ps1
+```
 ## 📜 Scripts
 
 *   \Install-AutoDeriva.ps1\: The main installer script.
