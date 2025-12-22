@@ -119,6 +119,7 @@ Describe 'SHA256 verification (installer helpers)' {
     }
 
     It 'falls back from Parallel to Single when runspace pooling fails (no crash)' {
+        $Config.VerifyFileHashes = $true
         $Config.HashVerifyMode = 'Parallel'
         $Config.HashVerifyMaxConcurrency = 5
         $Config.DeleteFilesOnHashMismatch = $false
@@ -136,12 +137,16 @@ Describe 'SHA256 verification (installer helpers)' {
             )
 
             $Script:Test_FailHashRunspacePool = $true
-            { Invoke-DownloadedFileHashVerification -FileList $fileList } | Should -Not -Throw
+            $script:HashVerifyResult = $null
+            { $script:HashVerifyResult = Invoke-DownloadedFileHashVerification -FileList $fileList } | Should -Not -Throw
             Test-Path -LiteralPath $tempFile | Should -BeTrue
             $Script:Stats.FilesDownloadFailed | Should -Be 0
+            $script:HashVerifyResult.CheckedCount | Should -Be 1
+            $script:HashVerifyResult.MismatchCount | Should -Be 0
         }
         finally {
             $Script:Test_FailHashRunspacePool = $false
+            $script:HashVerifyResult = $null
             Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
         }
     }

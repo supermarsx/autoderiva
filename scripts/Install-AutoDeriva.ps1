@@ -1622,18 +1622,18 @@ function Invoke-DownloadedFileHashVerification {
     if ($mode -eq 'Single') { $maxConcurrency = 1 }
 
     $toCheck = @()
-    $sawAnyHashField = $false
+    $sawAnyHashValue = $false
     foreach ($f in $FileList) {
         if (-not $f) { continue }
         if (-not ($f.ContainsKey('ExpectedSha256'))) { continue }
-        $sawAnyHashField = $true
         $expected = [string]$f.ExpectedSha256
         if ([string]::IsNullOrWhiteSpace($expected)) { continue }
+        $sawAnyHashValue = $true
         if (-not (Test-Path -LiteralPath $f.OutputPath)) { continue }
         $toCheck += $f
     }
     if ($toCheck.Count -eq 0) {
-        if (-not $sawAnyHashField) {
+        if (-not $sawAnyHashValue) {
             Write-AutoDerivaLog 'WARN' 'VerifyFileHashes is enabled but no SHA256 values were provided (manifest missing hashes). Skipping hash verification.' 'Yellow'
         }
         return @{ CheckedCount = 0; MismatchCount = 0; MismatchedDriverInfs = @() }
@@ -1766,7 +1766,12 @@ function Invoke-DownloadedFileHashVerification {
         }
 
         if (-not $parallelOk) {
+            # Ensure results reflect the Single fallback only.
+            $checked = 0
+            $mismatch = 0
+            $mismatchedDriverInfs = @()
             foreach ($f in $toCheck) {
+                $checked++
                 $ok = $false
                 try {
                     $ok = Test-AutoDerivaFileHash -Path $f.OutputPath -ExpectedSha256 ([string]$f.ExpectedSha256)
