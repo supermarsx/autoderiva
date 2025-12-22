@@ -302,6 +302,40 @@ function Get-AutoDerivaInteractiveUserSid {
         Write-Verbose "Failed to resolve interactive user SID via Win32_ComputerSystem: $_"
     }
 
+    try {
+        # Fallback: use loaded user hives under HKU when no interactive process is discoverable.
+        $candidateHives = Get-ChildItem -Path 'Registry::HKEY_USERS' -ErrorAction Stop |
+            Where-Object { $_.PSChildName -match '^S-1-(5-21|12-1)-' }
+
+        foreach ($hive in $candidateHives) {
+            $volatileEnvPath = Join-Path $hive.PSPath 'Volatile Environment'
+            $envProps = $null
+            try {
+                $envProps = Get-ItemProperty -Path $volatileEnvPath -ErrorAction Stop
+            }
+            catch {
+                $envProps = $null
+            }
+
+            if ($envProps) {
+                $sessionName = [string]$envProps.SESSIONNAME
+                $userName = [string]$envProps.USERNAME
+
+                if (($sessionName -and $sessionName -eq 'Console') -or (-not [string]::IsNullOrWhiteSpace($userName))) {
+                    return [string]$hive.PSChildName
+                }
+            }
+        }
+
+        $firstLoaded = $candidateHives | Select-Object -First 1
+        if ($firstLoaded) {
+            return [string]$firstLoaded.PSChildName
+        }
+    }
+    catch {
+        Write-Verbose "Failed to resolve interactive user SID via loaded HKU hives: $_"
+    }
+
     return $null
 }
 

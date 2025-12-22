@@ -5,7 +5,7 @@
 ![GitHub forks](https://img.shields.io/github/forks/supermarsx/autoderiva?style=flat-square)
 ![GitHub watchers](https://img.shields.io/github/watchers/supermarsx/autoderiva?style=flat-square)
 ![Repo Size](https://img.shields.io/github/repo-size/supermarsx/autoderiva?style=flat-square)
-![Driver Count](https://img.shields.io/badge/Drivers-163+-blue?style=flat-square)
+![Driver Count](https://img.shields.io/badge/Drivers-243+-blue?style=flat-square)
 [![Documentation](https://img.shields.io/badge/Docs-Configuration-blue?style=flat-square)](docs/configuration.md)
 [![Download BAT](https://img.shields.io/badge/Download-Install--AutoDeriva.bat-blue?style=flat-square)](https://github.com/supermarsx/autoderiva/releases/latest/download/Install-AutoDeriva.bat)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](license.md)
